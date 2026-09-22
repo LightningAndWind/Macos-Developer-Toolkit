@@ -1,0 +1,282 @@
+//
+//  ResponseViewerView.swift
+//  devkit
+//
+//  M2：响应展示区 —— 状态码/耗时/大小 + Pretty / Raw / Headers / Preview 视图。
+//
+
+import AppKit
+import SwiftUI
+import WebKit
+
+struct ResponseViewerView: View {
+    @Bindable var tool: HTTPTool
+
+    private enum Tab: String, CaseIterable, Identifiable {
+        case pretty = "Pretty"
+        case raw = "Raw"
+        case headers = "Headers"
+        case preview = "Preview"
+        var id: String { rawValue }
+    }
+
+    @State private var tab: Tab = .pretty
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let error = tool.errorMessage {
+                errorBanner(error)
+            }
+
+            if let response = tool.response {
+            statusBar(response)
+            Divider()
+            content(response)
+            } else if tool.isLoading {
+                loadingState
+            } else {
+                emptyState
+            }
+        }
+    }
+
+    // MARK: - 状态条
+
+    private func statusBar(_ response: HTTPResponseModel) -> some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(HTTPDisplay.color(for: response.statusCategory))
+                    .frame(width: 8, height: 8)
+                Text("\(response.statusCode)")
+                    .font(.body.monospaced().weight(.semibold))
+                Text(response.statusCategory.label)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Label(HTTPDisplay.duration(response.durationMs), systemImage: "clock")
+            Label(HTTPDisplay.size(response.sizeBytes), systemImage: "internaldrive")
+
+            if let ct = response.contentType {
+                Text(ct)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer()
+
+            Button {
+                copyBody(response)
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("复制响应体")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - 内容
+
+    private func content(_ response: HTTPResponseModel) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("视图", selection: $tab) {
+                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+
+                Spacer()
+
+                // 复制当前可见的文本内容（Pretty / Raw）；Headers / Preview 不适用。
+                if tab == .pretty || tab == .raw {
+                    Button {
+                        copyVisibleContent(response)
+                    } label: {
+                        Label("复制", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .help("复制当前视图内容")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            Group {
+                switch tab {
+                case .pretty:  prettyView(response)
+                case .raw:     rawView(response)
+                case .headers: headersView(response)
+                case .preview: previewView(response)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private func prettyView(_ response: HTTPResponseModel) -> some View {
+        if let json = response.prettyJSON {
+            selectableCode(json)
+        } else if let text = response.bodyText {
+            selectableCode(text)
+        } else {
+            binaryHint(response)
+        }
+    }
+
+    @ViewBuilder
+    private func rawView(_ response: HTTPResponseModel) -> some View {
+        if let text = response.bodyText {
+            selectableCode(text)
+        } else {
+            binaryHint(response)
+        }
+    }
+
+    private func headersView(_ response: HTTPResponseModel) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(response.headers.enumerated()), id: \.offset) { _, header in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(header.key)
+                            .font(.body.monospaced().weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 180, alignment: .leading)
+                        Text(header.value)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Divider()
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private func previewView(_ response: HTTPResponseModel) -> some View {
+        if response.isHTML {
+            HTMLPreview(html: response.bodyText ?? "")
+        } else if response.isImage, let image = NSImage(data: response.bodyData) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .padding(12)
+        } else {
+            ContentUnavailableView(
+                "无法预览",
+                systemImage: "eye.slash",
+                description: Text("Preview 仅支持 HTML 与图片响应。")
+            )
+        }
+    }
+
+    // MARK: - 辅助视图
+
+    private func selectableCode(_ text: String) -> some View {
+        // ScrollView 默认把比视口窄的内容居中。用 GeometryReader 拿到视口尺寸，
+        // 给文本容器一个 >= 视口的 minWidth/minHeight 并锁 .topLeading：
+        // 窄内容靠左上，宽内容仍可横向滚动。
+        GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                Text(text)
+                    .font(.body.monospaced())
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(minWidth: geo.size.width, maxWidth: .infinity,
+                           minHeight: geo.size.height, alignment: .topLeading)
+            }
+        }
+    }
+
+    private func binaryHint(_ response: HTTPResponseModel) -> some View {
+        ContentUnavailableView(
+            "二进制内容",
+            systemImage: "doc.zipper",
+            description: Text("响应体无法以文本显示（\(HTTPDisplay.size(response.sizeBytes))）。")
+        )
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.large)
+            Text("正在发送请求…").font(.callout).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView(
+            "尚未发送请求",
+            systemImage: "arrow.up.arrow.down.square",
+            description: Text("填写地址后点“发送”或按 ⌘↵。")
+        )
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(message).font(.callout)
+            Spacer()
+        }
+        .foregroundStyle(.red)
+        .padding(10)
+        .background(Color.red.opacity(0.10))
+    }
+
+    private func copyBody(_ response: HTTPResponseModel) {
+        let text = response.bodyText ?? ""
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// 复制当前标签页可见的文本：Pretty 优先复制格式化 JSON，Raw 复制原始体。
+    private func copyVisibleContent(_ response: HTTPResponseModel) {
+        let text: String?
+        switch tab {
+        case .pretty: text = response.prettyJSON ?? response.bodyText
+        case .raw:    text = response.bodyText
+        default:      text = nil
+        }
+        guard let text else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// WKWebView 包装，用于 HTML Preview。
+private struct HTMLPreview: NSViewRepresentable {
+    let html: String
+
+    func makeNSView(context: Context) -> WKWebView {
+        let view = WKWebView()
+        view.setValue(false, forKey: "drawsBackground")
+        return view
+    }
+
+    func updateNSView(_ nsView: WKWebView, context: Context) {
+        if context.coordinator.lastHTML != html {
+            context.coordinator.lastHTML = html
+            nsView.loadHTMLString(html, baseURL: nil)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var lastHTML: String?
+    }
+}

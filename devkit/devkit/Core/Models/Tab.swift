@@ -46,6 +46,9 @@ final class Tab: Identifiable, Hashable {
         return ToolRegistry.shared.descriptor(for: toolID)?.title ?? "未知工具"
     }
 
+    /// 是否有未保存的修改（驱动 `*` 标记）。读取工具实例脏标志；工具为 @Observable，改动会驱动视图刷新。
+    var hasUnsavedChanges: Bool { toolInstance?.hasUnsavedContent ?? false }
+
     static func == (lhs: Tab, rhs: Tab) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

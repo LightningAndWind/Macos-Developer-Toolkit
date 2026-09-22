@@ -30,11 +30,7 @@ struct GroupChipView: View {
     var body: some View {
         HStack(spacing: Theme.Metrics.tabInnerSpacing) {
             Circle().fill(group.color.swiftUIColor).frame(width: 8, height: 8)
-            Text(group.name)
-                .font(Theme.Fonts.tabTitle.weight(.medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            FadingTitleText(text: group.name, font: Theme.Fonts.tabTitle.weight(.medium))
             Text("\(members.count)")
                 .font(Theme.Fonts.badge)
                 .foregroundStyle(.secondary)
@@ -61,6 +57,7 @@ struct GroupChipView: View {
         .animation(Theme.Motion.micro, value: containsSelectedTab)
         .onTapGesture { toggleCollapsed() }
         .contextMenu { menu }
+        .help(group.name)
     }
 
     @ViewBuilder

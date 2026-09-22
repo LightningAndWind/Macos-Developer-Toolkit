@@ -154,11 +154,7 @@ struct TabItemView: View {
                 .focused($titleFieldFocused)
                 .onSubmit(commitRename)
         } else {
-            Text(tab.displayTitle)
-                .font(Theme.Fonts.tabTitle)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            FadingTitleText(text: tab.displayTitle + (tab.hasUnsavedChanges ? "  *" : ""))
         }
     }
 
@@ -235,8 +231,7 @@ struct TabItemView: View {
     }
 
     private func commitRename() {
-        appState.tabManager.rename(tabID: tab.id, to: draftTitle)
-        appState.saveSession()
+        appState.renameHTTP(tabID: tab.id, newTitle: draftTitle)
         isEditingTitle = false
     }
 

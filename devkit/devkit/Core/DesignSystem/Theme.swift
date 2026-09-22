@@ -13,9 +13,23 @@ enum Theme {
 
     /// 尺寸与间距令牌。
     enum Metrics {
-        /// 左侧竖向标签栏（侧栏）宽度。
+        /// 左侧竖向标签栏（侧栏）默认宽度；实际宽度由用户拖拽分割线调整并持久化。
         static let sidebarWidth: CGFloat = 208
-        /// 侧栏顶部预留高度：容纳左上角三色按钮 + "+" 按钮。
+        /// 侧栏最小宽度：约为默认宽度一半，且比左上角三色按钮（约 80pt）略宽，保证按钮不溢出。
+        static let sidebarMinWidth: CGFloat = 108
+        /// 侧栏最大宽度：再宽会明显挤压内容区，收益递减。
+        static let sidebarMaxWidth: CGFloat = 360
+        /// 分割线拖拽热区宽度（视觉仍为 1pt 细线，仅热区加宽）。
+        static let splitterHitWidth: CGFloat = 7
+        /// 横向分割线（上下分区）拖拽热区高度；视觉仍为 1pt 细线，仅热区加高。
+        static let splitterHitHeight: CGFloat = 7
+        /// HTTP 请求编辑区 / 响应区各自的最小高度：拖拽分隔线时任一区域不得压缩到此值以下。
+        static let httpPaneMinHeight: CGFloat = 120
+        /// 标题尾部渐隐长度：文字超出可展示宽度时，最后这段距离内淡出消失（不用省略号）。
+        static let titleFadeLength: CGFloat = 18
+        /// 标签标题单行行高（12pt 系统字体），用于固定渐隐文本容器高度，避免 GeometryReader 纵向贪婪。
+        static let titleLineHeight: CGFloat = 16
+        /// 侧栏顶部预留高度：容纳左上角三色按钮 + “+” 按钮。
         static let sidebarHeaderHeight: CGFloat = 38
         /// 单个标签行高度。
         static let tabRowHeight: CGFloat = 30
@@ -71,6 +85,11 @@ enum Theme {
         )
         /// 分组行。
         static let chip: AnyTransition = .opacity
+        /// 下拉弹层：自顶部锚点淡入并轻微展开，收起时仅淡出（“渐入渐出”）。
+        static let dropdown: AnyTransition = .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top)),
+            removal: .opacity
+        )
     }
 
     /// 颜色令牌。
@@ -89,6 +108,10 @@ enum Theme {
         static let scrollKnob = Color.primary.opacity(0.28)
         /// 拖拽时留在原位的“残影”占位行透明度。
         static let dragGhostOpacity: Double = 0.15
+        /// 侧栏与内容区之间的分割线。
+        static let splitter = Color(nsColor: .separatorColor)
+        /// 拖拽 / 悬停分割线时的高亮色，提示“此处可拖动调宽”。
+        static let splitterActive = Color.accentColor.opacity(0.75)
         /// 浮动拖拽预览的阴影。
         static let dragShadow = Color.black.opacity(0.20)
     }

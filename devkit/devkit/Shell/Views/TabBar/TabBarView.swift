@@ -4,6 +4,7 @@
 //
 //  左侧竖向标签栏（侧栏）：顶部为三色按钮预留空间，
 //  下方竖向列表渲染 layoutRows（分组头 + 标签），末尾追加与标签等大的“+”整行按钮。超出高度显示自绘滚动指示条，支持滚轮。
+//  侧栏宽度可由用户拖拽分割线调整：行矩形跟随宽度伸缩，标题在窄到装不下时于右缘渐隐（见 FadingTitleText）。
 //
 
 import SwiftUI
@@ -115,6 +116,7 @@ struct TabBarView: View {
 ///
 /// 独立成 View：拖拽时只有本层读取 `previewTopY/previewShiftX`，
 /// 因此每次鼠标移动只重绘这个很小的预览，而不会触发整个标签列表重算，保证拖拽顺滑。
+/// 宽度不取固定令牌而是就地测量——侧栏宽度可调整，预览必须与真实行等宽。
 private struct TabDragPreviewOverlay: View {
     @Environment(AppState.self) private var appState
     let coordinator: TabDragCoordinator
@@ -125,14 +127,16 @@ private struct TabDragPreviewOverlay: View {
             let groupColor = tab.groupID.flatMap { gid in
                 appState.tabManager.groups.first(where: { $0.id == gid })?.color.swiftUIColor
             }
-            let rowWidth = Theme.Metrics.sidebarWidth - Theme.Metrics.listPadding * 2
-            TabDragPreviewView(tab: tab, groupColor: groupColor)
-                .frame(width: rowWidth)
-                .position(
-                    x: Theme.Metrics.sidebarWidth / 2 + coordinator.previewShiftX,
-                    y: coordinator.previewTopY + Theme.Metrics.tabRowHeight / 2
-                )
-                .allowsHitTesting(false)
+            GeometryReader { proxy in
+                let rowWidth = proxy.size.width - Theme.Metrics.listPadding * 2
+                TabDragPreviewView(tab: tab, groupColor: groupColor)
+                    .frame(width: rowWidth)
+                    .position(
+                        x: proxy.size.width / 2 + coordinator.previewShiftX,
+                        y: coordinator.previewTopY + Theme.Metrics.tabRowHeight / 2
+                    )
+            }
+            .allowsHitTesting(false)
         }
     }
 }

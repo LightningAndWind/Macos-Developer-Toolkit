@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main
 struct devkitApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState: AppState = .shared
     @Environment(\.scenePhase) private var scenePhase
 
@@ -32,6 +34,16 @@ struct devkitApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             DevkitCommands(appState: appState)
+        }
+    }
+}
+
+/// 应用生命周期兜底：正常退出（⌘Q）前立即落盘会话，取消挂起的防抖任务确保写入最新状态。
+/// 开发重编译/强杀不走此钩子，由 HTTPToolView 的内容变更防抖保存兜底。
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            AppState.shared.saveSession()
         }
     }
 }

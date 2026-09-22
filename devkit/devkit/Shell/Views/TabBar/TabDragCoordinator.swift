@@ -178,11 +178,7 @@ struct TabDragPreviewView: View {
                 .font(Theme.Fonts.tabSymbol)
                 .foregroundStyle(.secondary)
                 .frame(width: 14)
-            Text(tab.displayTitle)
-                .font(Theme.Fonts.tabTitle)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            FadingTitleText(text: tab.displayTitle)
         }
         .padding(.horizontal, Theme.Metrics.tabHPadding)
         .frame(height: Theme.Metrics.tabRowHeight)

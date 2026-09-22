@@ -36,6 +36,17 @@ struct DevkitCommands: Commands {
         }
 
         CommandGroup(replacing: .saveItem) {
+            Button("保存请求") {
+                guard let tab = appState.tabManager.selectedTab,
+                      let tool = tab.toolInstance, tool.supportsSave else { return }
+                if tool.isSaved {
+                    try? tool.saveViaShell()   // 已保存→原地更新，不弹框
+                } else {
+                    appState.pendingSaveTabID = tab.id  // 首次→弹保存位置对话框
+                }
+            }
+            .keyboardShortcut("s", modifiers: .command)
+
             Button("关闭标签") {
                 if let id = appState.tabManager.selectedTabID {
                     if appState.tabManager.selectedTab?.toolInstance?.hasUnsavedContent == true {
@@ -70,8 +81,7 @@ struct DevkitCommands: Commands {
                 tf.frame.size.width += 80
                 alert.accessoryView = tf
                 if alert.runModal() == .alertFirstButtonReturn {
-                    appState.tabManager.rename(tabID: tab.id, to: tf.stringValue)
-                    appState.saveSession()
+                    appState.renameHTTP(tabID: tab.id, newTitle: tf.stringValue)
                 }
             }
             .keyboardShortcut("e", modifiers: .command)

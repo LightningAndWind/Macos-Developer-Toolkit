@@ -15,6 +15,8 @@ struct TabSnapshot: Codable, Identifiable, Hashable {
     var groupID: UUID?
     var isPinned: Bool
     var createdAt: Date
+    /// 工具自行贡献的内部状态（如 HTTP 请求内容）；由 `DevkitTool.sessionStateData()` 编码。旧快照无此字段 → nil。
+    var toolState: Data?
 }
 
 /// 序列化到磁盘的分组快照。

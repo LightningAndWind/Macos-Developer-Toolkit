@@ -273,7 +273,8 @@ final class TabManager {
                                          customTitle: $0.customTitle,
                                          groupID: $0.groupID,
                                          isPinned: $0.isPinned,
-                                         createdAt: $0.createdAt) },
+                                         createdAt: $0.createdAt,
+                                         toolState: $0.toolInstance?.sessionStateData()) },
             groups: groups.map { TabGroupSnapshot(id: $0.id,
                                                   name: $0.name,
                                                   colorRaw: $0.color.rawValue,
@@ -293,6 +294,7 @@ final class TabManager {
         for t in window.tabs {
             guard registry.descriptor(for: t.toolID) != nil else { continue }
             let instance = registry.makeTool(id: t.toolID)
+            if let data = t.toolState { instance?.restoreSessionState(data) }
             let tab = Tab(id: t.id,
                           toolID: t.toolID,
                           customTitle: t.customTitle,

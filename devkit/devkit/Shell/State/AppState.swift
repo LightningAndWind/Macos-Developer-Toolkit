@@ -35,6 +35,11 @@ final class AppState {
     /// 关闭 tab 时若有未保存内容需要用户确认；M1 用最小编辑器：一次一个 pending。
     var pendingCloseTabID: UUID?
 
+    /// 需弹出“保存位置”对话框的 tab（首次 ⌘S）；nil 表示不弹。
+    var pendingSaveTabID: UUID?
+    /// 新建 HTTP 标签后需弹出“新建 / 打开已保存”选择框的 tab。
+    var httpChooserTabID: UUID?
+
     // MARK: - Init
 
     /// 仅内部使用；外部通过 `.shared`。default 参数 需 caller 处于 MainActor，因此直接内部创建。
@@ -123,13 +128,29 @@ final class AppState {
 
     // MARK: - Session
 
+    /// 防抖落盘任务；连续编辑只保留最后一次，避免每敲一键就写库。
+    private var sessionSaveTask: Task<Void, Never>?
+
     func saveSession() {
+        // 立即保存时取消挂起的防抖任务，防止其稍后用更旧的状态覆盖。
+        sessionSaveTask?.cancel()
+        sessionSaveTask = nil
         let snapshot = SessionSnapshot(
             version: SessionSnapshot.currentVersion,
             savedAt: .now,
             windows: [tabManager.snapshot(windowID: windowID)]
         )
         try? SessionStore.save(snapshot)
+    }
+
+    /// 内容变更后的延迟保存：短防抖窗口内合并多次触发，保证退出/崩溃前最新编辑已落盘。
+    func scheduleSessionSave(debounce: TimeInterval = 0.5) {
+        sessionSaveTask?.cancel()
+        sessionSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(debounce * 1_000_000_000))
+            if Task.isCancelled { return }
+            self?.saveSession()
+        }
     }
 
     private func restoreSession() {
@@ -151,6 +172,38 @@ final class AppState {
 
     func closeTab(_ id: UUID) {
         tabManager.close(tabID: id)
+        saveSession()
+    }
+
+    // MARK: - HTTP 集合保存 / 重命名协调
+
+    /// 获取指定 tab 的 HTTP 工具实例（非 HTTP 返回 nil）。
+    func httpTool(forTab id: UUID) -> HTTPTool? {
+        tabManager.tabs.first { $0.id == id }?.toolInstance as? HTTPTool
+    }
+
+    /// 提交一次保存：写入/更新记录 + 把标签标题设为保存名 + 持久化会话。返回是否成功。
+    @discardableResult
+    func commitHTTPSave(tabID: UUID, name: String, folderID: UUID?) -> Bool {
+        guard let tool = httpTool(forTab: tabID) else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        do {
+            _ = try tool.persist(name: trimmed, folderID: folderID)
+            tabManager.rename(tabID: tabID, to: trimmed)
+            saveSession()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// 统一重命名入口：改标签标题；若为已保存 HTTP，同步回写记录名。
+    func renameHTTP(tabID: UUID, newTitle: String) {
+        tabManager.rename(tabID: tabID, to: newTitle)
+        if let tool = httpTool(forTab: tabID), tool.isSaved, !newTitle.isEmpty {
+            tool.updateSavedName(newTitle)
+        }
         saveSession()
     }
 }

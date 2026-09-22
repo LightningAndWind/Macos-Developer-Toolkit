@@ -2,7 +2,7 @@
 //  AppPreferences.swift
 //  devkit
 //
-//  应用偏好：数据存储目录（沙盒 security-scoped bookmark）+ 首次启动标记。
+//  应用偏好：数据存储目录（沙盒 security-scoped bookmark）+ 首次启动标记 + 侧栏宽度等 UI 偏好键。
 //
 
 import Foundation
@@ -11,6 +11,9 @@ import Foundation
 @MainActor
 final class AppPreferences {
     static let shared = AppPreferences()
+
+    /// 侧栏宽度偏好键。视图侧用 `@AppStorage` 直接绑定，保证拖拽时 SwiftUI 实时刷新。
+    static let sidebarWidthKey = "devkit.sidebar.width"
 
     private enum Keys {
         static let dataBookmark = "devkit.dataDir.bookmark"

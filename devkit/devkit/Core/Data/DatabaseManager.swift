@@ -56,6 +56,35 @@ final class DatabaseManager: @unchecked Sendable {
             value BLOB NOT NULL,
             updated_at REAL NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS http_history (
+            id TEXT PRIMARY KEY,
+            created_at REAL NOT NULL,
+            method TEXT NOT NULL,
+            url TEXT NOT NULL,
+            status_code INTEGER,
+            duration_ms INTEGER,
+            size_bytes INTEGER,
+            request_json BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_history_created ON http_history(created_at);
+        CREATE INDEX IF NOT EXISTS idx_history_url ON http_history(url);
+        CREATE TABLE IF NOT EXISTS http_folders(
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            name TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_folder_parent ON http_folders(parent_id);
+        CREATE TABLE IF NOT EXISTS http_requests(
+            id TEXT PRIMARY KEY,
+            folder_id TEXT,
+            name TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            request_json BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_folder ON http_requests(folder_id);
         """
         try _execLocked(sql)
     }
