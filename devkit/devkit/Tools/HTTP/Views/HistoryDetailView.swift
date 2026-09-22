@@ -281,15 +281,20 @@ private struct SelectableCodeBlock: View {
     let text: String
 
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            Text(text.isEmpty ? "无" : text)
-                .font(.body.monospaced())
-                .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                .textSelection(.enabled)
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+        // 双向 ScrollView 会把窄于视口的内容居中；用 GeometryReader 拿到视口宽，
+        // 给内容 minWidth >= 视口并锁 .topLeading：短内容靠左上，宽内容仍可横向滚动。
+        GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                Text(text.isEmpty ? "无" : text)
+                    .font(.body.monospaced())
+                    .foregroundStyle(text.isEmpty ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .frame(minWidth: geo.size.width, maxWidth: .infinity,
+                           minHeight: geo.size.height, alignment: .topLeading)
+            }
         }
-        .frame(maxHeight: 160)
+        .frame(height: 160)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.5)))
     }

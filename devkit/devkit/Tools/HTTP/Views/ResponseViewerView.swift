@@ -22,6 +22,11 @@ struct ResponseViewerView: View {
 
     @State private var tab: Tab = .pretty
 
+    /// 数据栏复制按钮的瞬时反馈（状态栏不再重复提供复制）。
+    @State private var contentCopied = false
+    /// 代际号：避免连续复制时旧任务提前清除新一次的反馈。
+    @State private var contentCopyGeneration = 0
+
     var body: some View {
         VStack(spacing: 0) {
             if let error = tool.errorMessage {
@@ -66,14 +71,6 @@ struct ResponseViewerView: View {
             }
 
             Spacer()
-
-            Button {
-                copyBody(response)
-            } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.borderless)
-            .help("复制响应体")
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -92,6 +89,7 @@ struct ResponseViewerView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+                .pointingHandOnHover()
 
                 Spacer()
 
@@ -100,11 +98,13 @@ struct ResponseViewerView: View {
                     Button {
                         copyVisibleContent(response)
                     } label: {
-                        Label("复制", systemImage: "doc.on.doc")
+                        Label(contentCopied ? "复制成功" : "复制", systemImage: contentCopied ? "checkmark.circle.fill" : "doc.on.doc")
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
+                    .foregroundStyle(contentCopied ? Color.green : Color.primary)
                     .help("复制当前视图内容")
+                    .pointingHandOnHover()
                 }
             }
             .padding(.horizontal, 12)
@@ -237,10 +237,15 @@ struct ResponseViewerView: View {
         .background(Color.red.opacity(0.10))
     }
 
-    private func copyBody(_ response: HTTPResponseModel) {
-        let text = response.bodyText ?? ""
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    /// 数据栏复制按钮的瞬时反馈，约 1.4s 后自动复原。
+    private func flashContentCopied() {
+        contentCopyGeneration += 1
+        let generation = contentCopyGeneration
+        contentCopied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            if generation == contentCopyGeneration { contentCopied = false }
+        }
     }
 
     /// 复制当前标签页可见的文本：Pretty 优先复制格式化 JSON，Raw 复制原始体。
@@ -254,6 +259,7 @@ struct ResponseViewerView: View {
         guard let text else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        flashContentCopied()
     }
 }
 

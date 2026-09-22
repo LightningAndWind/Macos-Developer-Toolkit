@@ -127,10 +127,27 @@ private struct ResidentToolTab: View, Equatable {
         .opacity(isVisible ? 1 : 0)
         .allowsHitTesting(isVisible)
         .accessibilityHidden(!isVisible)
+        // 把可见性透传给工具：不可见的常驻标签需真正隐藏其内部 NSTextView，
+        // 否则其 I 型光标热区与插入点会叠加到当前标签之上。
+        .environment(\.activeToolTab, isVisible)
     }
 }
 
 #Preview {
     AppShellView()
         .environment(AppState.shared)
+}
+
+// MARK: - 标签可见性环境值
+
+private struct ActiveToolTabKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// 当前工具标签是否为可见层。常驻但不可见的标签据此隐藏其重量级 NSTextView。
+    var activeToolTab: Bool {
+        get { self[ActiveToolTabKey.self] }
+        set { self[ActiveToolTabKey.self] = newValue }
+    }
 }

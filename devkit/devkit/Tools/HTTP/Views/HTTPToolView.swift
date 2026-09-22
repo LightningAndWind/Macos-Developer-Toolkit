@@ -110,6 +110,7 @@ struct HTTPToolView: View {
             // borderlessButton 会额外画一个下拉箭头，与图标抢视觉；只留图标。
             .menuIndicator(.hidden)
             .fixedSize()
+            .pointingHandOnHover()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -133,6 +134,7 @@ struct HTTPToolView: View {
         .keyboardShortcut(.return, modifiers: .command)
         .buttonStyle(.borderedProminent)
         .disabled(tool.request.isEmpty || tool.isLoading)
+        .pointingHandOnHover()
     }
 
     private func copyCURL() {

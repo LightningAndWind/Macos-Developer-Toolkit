@@ -70,6 +70,7 @@ struct HTTPMethodPicker: View {
         .background(chipBackground(tint.opacity(0.12)))
         .contentShape(Rectangle())
         .onTapGesture { toggle() }
+        .pointingHandOnHover()
         .animation(Theme.Motion.micro, value: isPresented)
         .animation(Theme.Motion.micro, value: method)
     }

@@ -55,6 +55,14 @@ enum Theme {
         static let dragMinimumDistance: CGFloat = 3
         /// 浮动预览相对中心跟随指针的水平最大偏移（防止溢出侧栏）。
         static let dragMaxHorizontalShift: CGFloat = 18
+        /// JSON 树视图逐级缩进宽度。
+        static let jsonTreeIndent: CGFloat = 16
+        /// JSON 树视图展开三角槽宽度（叶子占空，保证图标同列对齐）。
+        static let jsonTreeGutter: CGFloat = 16
+        /// JSON 树视图类型图标列宽度。
+        static let jsonTreeIconWidth: CGFloat = 14
+        /// JSON 代码编辑器行号 gutter 最小宽度（随行数位数自动加宽）。
+        static let jsonLineNumberGutterWidth: CGFloat = 44
     }
 
     /// 字体令牌。
@@ -114,5 +122,15 @@ enum Theme {
         static let splitterActive = Color.accentColor.opacity(0.75)
         /// 浮动拖拽预览的阴影。
         static let dragShadow = Color.black.opacity(0.20)
+        /// JSON 语法着色：对象键名。
+        static let jsonKey = Color(red: 0.11, green: 0.34, blue: 0.72)
+        /// JSON 语法着色：字符串值。
+        static let jsonString = Color(red: 0.72, green: 0.18, blue: 0.20)
+        /// JSON 语法着色：数字。
+        static let jsonNumber = Color(red: 0.13, green: 0.50, blue: 0.30)
+        /// JSON 语法着色：布尔 / null 字面量。
+        static let jsonLiteral = Color(red: 0.55, green: 0.26, blue: 0.66)
+        /// JSON 语法着色：标点括号 / 冒号 / 逗号。
+        static let jsonPunctuation = Color.primary.opacity(0.6)
     }
 }
