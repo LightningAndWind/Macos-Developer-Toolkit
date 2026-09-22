@@ -9,10 +9,16 @@ import SwiftUI
 
 /// 展示层格式化与配色。
 enum HTTPDisplay {
-    /// 字节数转可读字符串（KB / MB）。
+    /// 字节数转可读字符串（B / KB / MB）。
+    ///
+    /// 必须带上 `.useBytes`：`allowedUnits` 里只有 KB 起步时，1 KB 以下一律四舍五入成
+    /// 「0 KB」—— 一个 673 字节的响应会显示成 0 KB，用户会以为响应体是空的。
+    /// 口径是 `countStyle: .file`，即**十进制**（1000 进制）；
+    /// 因此响应体上限之类的常量要用 10_000_000 而不是 10 * 1_048_576，
+    /// 否则界面上会显示成「10.5 MB」，与文档对不上。
     static func size(_ bytes: Int) -> String {
         let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: Int64(bytes))
     }

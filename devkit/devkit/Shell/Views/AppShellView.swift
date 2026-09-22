@@ -58,6 +58,17 @@ struct AppShellView: View {
                 HTTPStartupChooser(tabID: tabID) { appState.httpChooserTabID = nil }
             }
         }
+        // 新建 SSH 标签时的“本地 / 新建 / 选择已有”选择框。
+        .sheet(
+            isPresented: Binding(
+                get: { appState.sshChooserTabID != nil },
+                set: { if !$0 { appState.sshChooserTabID = nil } }
+            )
+        ) {
+            if let tabID = appState.sshChooserTabID {
+                SSHStartupChooser(tabID: tabID) { appState.sshChooserTabID = nil }
+            }
+        }
         // 首次 ⌘S 的“保存位置”对话框。
         .sheet(
             isPresented: Binding(
@@ -68,6 +79,15 @@ struct AppShellView: View {
             if let tabID = appState.pendingSaveTabID {
                 RequestSaveDialog(tabID: tabID) { appState.pendingSaveTabID = nil }
             }
+        }
+        // 设置面板：侧栏左下角设置按钮 / 菜单「设置…」触发。
+        .sheet(
+            isPresented: Binding(
+                get: { appState.isSettingsPresented },
+                set: { appState.isSettingsPresented = $0 }
+            )
+        ) {
+            SettingsView()
         }
     }
 

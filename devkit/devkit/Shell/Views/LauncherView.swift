@@ -118,10 +118,15 @@ struct LauncherView: View {
 
     private func open(_ descriptor: ToolDescriptor) {
         RecentToolsStore.shared.record(descriptor.id)
-        // HTTP：先建空白标签，再弹“新建 / 打开已保存”选择框（M5）。
+        // HTTP / SSH：先建空白标签，再弹“新建 / 打开已保存”选择框（HTTP M5、SSH M4）。
         if descriptor.id == HTTPTool.descriptor.id {
             if let tab = appState.tabManager.openTool(descriptor: descriptor) {
                 appState.httpChooserTabID = tab.id
+                appState.saveSession()
+            }
+        } else if descriptor.id == SSHTool.descriptor.id {
+            if let tab = appState.tabManager.openTool(descriptor: descriptor) {
+                appState.sshChooserTabID = tab.id
                 appState.saveSession()
             }
         } else {

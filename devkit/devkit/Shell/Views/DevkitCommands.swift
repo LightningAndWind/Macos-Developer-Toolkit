@@ -2,7 +2,7 @@
 //  DevkitCommands.swift
 //  devkit
 //
-//  菜单栏命令与快捷键：⌘T 新标签、⌘W 关闭、⌘1~9 直达、⌃Tab 切换、⌘E 重命名。
+//  菜单栏命令与快捷键：⌘T 新标签、⌘W 关闭、⌘1~9 直达、⌃Tab 切换、⌘E 重命名、⌘, 设置。
 //
 
 import SwiftUI
@@ -103,7 +103,14 @@ struct DevkitCommands: Commands {
             }
         }
 
-        CommandGroup(after: .appSettings) {
+        CommandGroup(replacing: .appSettings) {
+            Button("设置…") {
+                appState.isSettingsPresented = true
+            }
+            .keyboardShortcut(",", modifiers: .command)
+
+            Divider()
+
             Button("重置数据目录…") {
                 appState.resetDataDirectory()
             }

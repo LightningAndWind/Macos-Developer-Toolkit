@@ -87,6 +87,10 @@ final class TabManager {
         if closing.toolInstance?.hasUnsavedContent == true {
             // M1 简化：调用方负责在此之前弹框。这里仅暴露 `hasUnsavedContent` 检查 API。
         }
+        // 先通知工具收尾（关闭连接 / 结束子进程 / 放行挂起任务），再移除标签。
+        // 工具持有的网络连接、事件循环线程等资源不会因为对象被释放就立刻回收，
+        // 必须在这里显式释放，否则会随标签一起泄漏。
+        closing.toolInstance?.teardownOnTabClose()
         tabs.remove(at: idx)
         // 清理空组
         if let gid = closing.groupID,
@@ -284,6 +288,10 @@ final class TabManager {
     }
 
     func restore(_ window: WindowSessionSnapshot) {
+        // 若当前已有标签（例如启动失败重试后再次恢复），先逐个收尾再整体替换 ——
+        // 否则被替换掉的工具会带着连接 / 子进程一起被静默丢弃，收不到任何通知。
+        for tab in tabs { tab.toolInstance?.teardownOnTabClose() }
+
         let registry = ToolRegistry.shared
         var newGroups: [TabGroup] = []
         for g in window.groups {

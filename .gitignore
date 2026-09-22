@@ -34,6 +34,8 @@ DerivedData/
 .build/
 .swiftpm/
 Package.resolved
+# Xcode 解析依赖的检出目录（xcodebuild -clonedSourcePackagesDirPath）
+SourcePackages/
 # Xcode 11 之前的 SPM 目录
 Packages/
 Package.pins

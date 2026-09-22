@@ -64,10 +64,12 @@ final class DatabaseManager: @unchecked Sendable {
             status_code INTEGER,
             duration_ms INTEGER,
             size_bytes INTEGER,
+            saved_request_id TEXT,
             request_json BLOB NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_history_created ON http_history(created_at);
         CREATE INDEX IF NOT EXISTS idx_history_url ON http_history(url);
+        CREATE INDEX IF NOT EXISTS idx_history_saved ON http_history(saved_request_id);
         CREATE TABLE IF NOT EXISTS http_folders(
             id TEXT PRIMARY KEY,
             parent_id TEXT,
@@ -85,6 +87,38 @@ final class DatabaseManager: @unchecked Sendable {
             request_json BLOB NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_request_folder ON http_requests(folder_id);
+        CREATE TABLE IF NOT EXISTS ssh_folders(
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            name TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sshfolder_parent ON ssh_folders(parent_id);
+        CREATE TABLE IF NOT EXISTS ssh_profiles(
+            id TEXT PRIMARY KEY,
+            folder_id TEXT,
+            name TEXT NOT NULL,
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            auth_kind TEXT NOT NULL,
+            password TEXT,
+            key_file TEXT,
+            key_passphrase TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            profile_json BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sshprofile_folder ON ssh_profiles(folder_id);
+        CREATE TABLE IF NOT EXISTS ssh_known_hosts(
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            key_type TEXT NOT NULL,
+            key_blob BLOB NOT NULL,
+            added_at REAL NOT NULL,
+            PRIMARY KEY(host, port, key_type)
+        );
         """
         try _execLocked(sql)
     }
@@ -216,6 +250,11 @@ enum SQLiteValue {
 struct SQLiteRow {
     let stmt: OpaquePointer?
     func int(_ i: Int32) -> Int { Int(sqlite3_column_int64(stmt, i)) }
+    /// 可空整数列：SQL NULL 返回 nil，避免与真实的 0 混淆。
+    func intOrNil(_ i: Int32) -> Int? {
+        guard sqlite3_column_type(stmt, i) != SQLITE_NULL else { return nil }
+        return Int(sqlite3_column_int64(stmt, i))
+    }
     func real(_ i: Int32) -> Double { sqlite3_column_double(stmt, i) }
     func text(_ i: Int32) -> String? {
         guard let c = sqlite3_column_text(stmt, i) else { return nil }

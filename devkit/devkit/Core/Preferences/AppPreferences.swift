@@ -33,19 +33,18 @@ final class AppPreferences {
         dataDirectoryURL != nil
     }
 
-    /// 数据目录（返回前会尝试恢复 security-scope 访问权）。
+    /// 数据目录。关闭沙盒后以记录的绝对路径为准（可直接访问任意路径）；
+    /// 若路径缺失则回退解析历史书签（旧沙盒构建存的是 security-scope 书签）。
     var dataDirectoryURL: URL? {
+        if let path = defaults.string(forKey: Keys.dataPath), !path.isEmpty {
+            return URL(fileURLWithPath: path)
+        }
         guard let data = defaults.data(forKey: Keys.dataBookmark) else { return nil }
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: data,
-                                 options: [.withSecurityScope],
-                                 relativeTo: nil,
-                                 bookmarkDataIsStale: &stale) else { return nil }
-        if stale {
-            // 尝试刷新一次书签；失败也返回旧 URL 让用户在引导页重新选。
-            try? saveBookmark(for: url)
-        }
-        return url
+        return try? URL(resolvingBookmarkData: data,
+                        options: [.withSecurityScope],
+                        relativeTo: nil,
+                        bookmarkDataIsStale: &stale)
     }
 
     /// 数据库文件完整路径（`<dir>/devkit.sqlite3`）。
@@ -53,12 +52,12 @@ final class AppPreferences {
         dataDirectoryURL?.appendingPathComponent("devkit.sqlite3")
     }
 
-    /// 保存并激活目录访问权。校验目录可写。
+    /// 选择并记录数据目录。校验目录可写；关闭沙盒后无需 security-scope，直接记录路径。
     func setDataDirectory(_ url: URL) throws {
         try validateDirectoryWritable(url)
-        try saveBookmark(for: url)
         defaults.set(url.path, forKey: Keys.dataPath)
-        // 立即激活一次，保证随后 open db 能读写
+        saveBookmark(for: url)
+        // 兼容旧逻辑：尝试激活一次（非沙盒下为无害的空操作）。
         beginAccessing(url)
     }
 
@@ -84,10 +83,11 @@ final class AppPreferences {
 
     // MARK: - Private
 
-    private func saveBookmark(for url: URL) throws {
-        let data = try url.bookmarkData(options: [.withSecurityScope],
-                                        includingResourceValuesForKeys: nil,
-                                        relativeTo: nil)
+    /// 存一份普通书签作为路径缺失时的回退；非沙盒下用普通选项即可，且绝不抛出中断引导。
+    private func saveBookmark(for url: URL) {
+        guard let data = try? url.bookmarkData(options: [],
+                                               includingResourceValuesForKeys: nil,
+                                               relativeTo: nil) else { return }
         defaults.set(data, forKey: Keys.dataBookmark)
     }
 

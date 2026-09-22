@@ -170,13 +170,19 @@ struct HistoryDetailView: View {
         }
     }
 
+    /// 概览里的「大小」。快照被截断时真实长度未知，加「≥」前缀避免把 10 MB 读成服务器的完整返回。
+    private var sizeMetricText: String {
+        guard let bytes = record.sizeBytes else { return "—" }
+        return (record.response?.isBodyTruncated == true ? "≥ " : "") + HTTPDisplay.size(bytes)
+    }
+
     private var responsePane: some View {
         VStack(alignment: .leading, spacing: 16) {
             HTTPSection(title: "概览") {
                 HStack(spacing: 18) {
                     metric("状态", value: record.statusCode == nil ? "—" : String(record.statusCode ?? 0))
                     metric("耗时", value: record.durationMs == nil ? "—" : HTTPDisplay.duration(record.durationMs ?? 0))
-                    metric("大小", value: record.sizeBytes == nil ? "—" : HTTPDisplay.size(record.sizeBytes ?? 0))
+                    metric("大小", value: sizeMetricText)
                 }
             }
 
@@ -187,7 +193,7 @@ struct HistoryDetailView: View {
                 HTTPSection(title: "响应体 (Body)" + (snapshot.isBodyTruncated ? " · 已截断" : "")) {
                     responseBodyView(snapshot)
                     if snapshot.isBodyTruncated {
-                        Text("响应体较大，仅保存前 \(HTTPDisplay.size(HTTPHistoryStore.maxBodyBytes))；如需完整内容请重新发送。")
+                        Text("响应体较大，历史中仅保存前 \(HTTPDisplay.size(HTTPHistoryStore.maxBodyBytes))；如需完整内容请在编辑器中重新发送（单次响应最多保留 \(HTTPDisplay.size(HTTPClient.maxBodyBytes))）。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

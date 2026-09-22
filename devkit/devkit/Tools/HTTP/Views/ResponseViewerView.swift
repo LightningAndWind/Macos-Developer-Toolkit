@@ -35,6 +35,9 @@ struct ResponseViewerView: View {
 
             if let response = tool.response {
             statusBar(response)
+            if response.isBodyTruncated {
+                truncationBanner(response)
+            }
             Divider()
             content(response)
             } else if tool.isLoading {
@@ -60,7 +63,7 @@ struct ResponseViewerView: View {
             }
 
             Label(HTTPDisplay.duration(response.durationMs), systemImage: "clock")
-            Label(HTTPDisplay.size(response.sizeBytes), systemImage: "internaldrive")
+            Label(sizeText(response), systemImage: "internaldrive")
 
             if let ct = response.contentType {
                 Text(ct)
@@ -76,6 +79,30 @@ struct ResponseViewerView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// 大小文案。被截断时实际长度未知，加「≥」前缀 ——
+    /// 直接显示 10 MB 会让人以为服务器只返回了 10 MB。
+    private func sizeText(_ response: HTTPResponseModel) -> String {
+        (response.isBodyTruncated ? "≥ " : "") + HTTPDisplay.size(response.sizeBytes)
+    }
+
+    /// 响应体被截断时的说明条。
+    ///
+    /// 必须显式告知，否则用户会以为「响应就是这么短」—— 尤其是接口出问题时，
+    /// 看到被截断的报错 JSON 尾部缺失，很容易误判成服务端返回不完整。
+    private func truncationBanner(_ response: HTTPResponseModel) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "scissors")
+            Text("响应体超过 \(HTTPDisplay.size(HTTPClient.maxBodyBytes)) 上限，已中止接收，仅保留并显示前 \(HTTPDisplay.size(response.sizeBytes))。如需完整内容请用 curl 导出后在终端查看。")
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.10))
     }
 
     // MARK: - 内容
@@ -206,7 +233,7 @@ struct ResponseViewerView: View {
         ContentUnavailableView(
             "二进制内容",
             systemImage: "doc.zipper",
-            description: Text("响应体无法以文本显示（\(HTTPDisplay.size(response.sizeBytes))）。")
+            description: Text("响应体无法以文本显示（\(sizeText(response))）。")
         )
     }
 

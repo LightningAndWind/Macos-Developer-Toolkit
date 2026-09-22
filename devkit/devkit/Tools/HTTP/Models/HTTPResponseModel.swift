@@ -14,13 +14,17 @@ struct HTTPResponseModel {
     let statusCode: Int
     /// 全部响应头（保持原始大小写）。
     let headers: [(key: String, value: String)]
-    /// 原始响应体。
+    /// 原始响应体（超过 `HTTPClient.maxBodyBytes` 时只保留前 N 字节）。
     let bodyData: Data
     /// 往返耗时（毫秒）。
     let durationMs: Int
+    /// 响应体是否因超过 `HTTPClient.maxBodyBytes` 被截断。
+    let isBodyTruncated: Bool
 
     // MARK: - 派生指标
 
+    /// **实际保留**的字节数。被截断时这是上限值，不是服务器声明的完整长度 ——
+    /// 展示时需配合 `isBodyTruncated` 加「≥」前缀，否则会把 10 MB 说成真实大小。
     var sizeBytes: Int { bodyData.count }
 
     var contentType: String? {
@@ -108,8 +112,23 @@ struct HTTPResponseSnapshot: Codable, Hashable {
             self.isBodyTruncated = true
         } else {
             self.bodyData = response.bodyData
-            self.isBodyTruncated = false
+            // 继承上游（运行时）的截断标记：历史上限（1 MB）通常小于运行时上限（10 MB），
+            // 但若将来运行时上限被调小，漏掉这一句就会把「已被截断」的快照标成完整。
+            self.isBodyTruncated = response.isBodyTruncated
         }
+    }
+
+    /// 解码必须容忍旧版本写入的 JSON：`isBodyTruncated` 是后加的非可选字段，
+    /// 合成解码会对旧 JSON（无此键）抛 `keyNotFound`，而历史读取是 `try?` 吞错
+    /// —— 升级后所有旧历史记录会从列表里**静默消失**。缺键回退 `false`（完整响应），
+    /// 非可选语义保持，视图层零改动。其余字段自始存在，维持严格解码。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        statusCode = try container.decode(Int.self, forKey: .statusCode)
+        durationMs = try container.decode(Int.self, forKey: .durationMs)
+        headers = try container.decode([HTTPKV].self, forKey: .headers)
+        bodyData = try container.decode(Data.self, forKey: .bodyData)
+        isBodyTruncated = try container.decodeIfPresent(Bool.self, forKey: .isBodyTruncated) ?? false
     }
 
     // MARK: - 视图辅助（与 HTTPResponseModel 对齐）

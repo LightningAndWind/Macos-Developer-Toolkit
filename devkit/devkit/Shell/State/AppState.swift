@@ -39,6 +39,11 @@ final class AppState {
     var pendingSaveTabID: UUID?
     /// 新建 HTTP 标签后需弹出“新建 / 打开已保存”选择框的 tab。
     var httpChooserTabID: UUID?
+    /// 新建 SSH 标签后需弹出“本地 / 新建 SSH / 选择已有”选择框的 tab。
+    var sshChooserTabID: UUID?
+
+    /// 设置面板是否展示（侧栏左下角设置按钮 / 菜单「设置…」⌘,）。
+    var isSettingsPresented = false
 
     // MARK: - Init
 
@@ -60,6 +65,9 @@ final class AppState {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             completeOnboarding(with: dir)
             seedDemoSessionIfRequested()
+            openSettingsIfRequested()
+            DebugSnapshot.runIfRequested(appState: self)
+            await DebugSelfCheck.runIfRequested()
             return
         }
         #endif
@@ -124,6 +132,12 @@ final class AppState {
         if let first = opened.first { tabManager.select(first.id) }
         saveSession()
     }
+
+    /// 调试专用：`DEVKIT_OPEN_SETTINGS=1` 时启动即打开设置面板，便于迭代其 UI。
+    private func openSettingsIfRequested() {
+        guard ProcessInfo.processInfo.environment["DEVKIT_OPEN_SETTINGS"] == "1" else { return }
+        isSettingsPresented = true
+    }
     #endif
 
     // MARK: - Session
@@ -182,6 +196,16 @@ final class AppState {
         tabManager.tabs.first { $0.id == id }?.toolInstance as? HTTPTool
     }
 
+    /// 获取指定 tab 的 SSH 工具实例（非 SSH 返回 nil）。
+    func sshTool(forTab id: UUID) -> SSHTool? {
+        tabManager.tabs.first { $0.id == id }?.toolInstance as? SSHTool
+    }
+
+    /// 反查某工具实例所属 tab id（用于工具视图内重新唤起本标签的选择弹窗）。
+    func tabID(for tool: DevkitTool) -> UUID? {
+        tabManager.tabs.first { $0.toolInstance === tool }?.id
+    }
+
     /// 提交一次保存：写入/更新记录 + 把标签标题设为保存名 + 持久化会话。返回是否成功。
     @discardableResult
     func commitHTTPSave(tabID: UUID, name: String, folderID: UUID?) -> Bool {
@@ -205,5 +229,88 @@ final class AppState {
             tool.updateSavedName(newTitle)
         }
         saveSession()
+    }
+
+    /// 删除一条已保存请求：连带清掉它对应的历史记录，并同步已打开标签的绑定。
+    ///
+    /// 放在这里而不是设置面板内部：与 `commitHTTPSave` / `renameHTTP` 同属
+    /// 「跨标签的 HTTP 状态协调」，集中一处既便于复用，也让 `DebugSelfCheck` 能直接跑真实实现。
+    func deleteSavedHTTPRequest(_ id: UUID) {
+        try? HTTPCollectionStore.deleteRequest(id: id)
+        // 以「记录是否真的没了」为准再解绑：删除可能因库未打开等原因没生效，
+        // 那种情况下解绑会让记录还在、标签却丢了绑定（`deleteRequest` 在库未打开时是静默 return）。
+        guard HTTPCollectionStore.load(id: id) == nil else { return }
+        // 连带删除该记录“自身发出”的历史（按 saved_request_id 外键精确匹配，不误伤同 URL 其它来源）。
+        let didTouchHistory = HTTPHistoryStore.deleteForSavedRequest(id) > 0
+        // 已打开标签若正绑定这条记录则解绑：内容保留、重新出现未保存标记 `*`，⌘S 改走“另存为”。
+        var didDetach = false
+        for tab in tabManager.tabs {
+            if let tool = tab.toolInstance as? HTTPTool, tool.savedRequestID == id {
+                tool.detachSavedRecord()
+                didDetach = true
+            }
+        }
+        // 历史变了，让已打开的 HTTP 标签重读列表，避免面板与标签内历史不一致。
+        if didTouchHistory { reloadOpenHTTPTabsHistory() }
+        // 解绑改变了可持久化状态（savedRequestID / lastSavedRequest），必须落盘一次；
+        // 否则强杀或开发重编译后，会话快照里还留着指向已删记录的 ID。
+        if didDetach { scheduleSessionSave() }
+    }
+
+    /// 移动一条已保存请求到目标文件夹（`folderID == nil` = 根），并同步已打开标签的文件夹绑定。
+    func moveSavedHTTPRequest(id: UUID, toFolder folderID: UUID?) {
+        HTTPCollectionStore.moveRequest(id: id, to: folderID)
+        // 正绑定这条记录的标签：内容不变，仅把「保存位置」跟着改，避免标签仍指向旧文件夹。
+        var didTouch = false
+        for tab in tabManager.tabs {
+            if let tool = tab.toolInstance as? HTTPTool, tool.savedRequestID == id {
+                tool.savedFolderID = folderID
+                didTouch = true
+            }
+        }
+        if didTouch { scheduleSessionSave() }
+    }
+
+    /// 删除一个 HTTP 文件夹（级联删子孙文件夹及其中的请求），连带清掉这些请求的历史，并解绑相应已打开标签。
+    func deleteHTTPFolder(id: UUID) {
+        // 先在删除前算出将被级联移除的文件夹集：用于筛出受影响请求。
+        let folders = HTTPCollectionStore.allFolders()
+        var folderSet: Set<UUID> = [id]
+        var frontier: [UUID] = [id]
+        while let current = frontier.popLast() {
+            for f in folders where f.parentID == current && !folderSet.contains(f.id) {
+                folderSet.insert(f.id)
+                frontier.append(f.id)
+            }
+        }
+        let affected = HTTPCollectionStore.allRequests()
+            .filter { fid in fid.folderID.map { folderSet.contains($0) } ?? false }
+        let affectedRequestIDs = Set(affected.map(\.id))
+
+        try? HTTPCollectionStore.deleteFolder(id: id)
+
+        // 连带删除被级联移除记录“自身发出”的历史（按 saved_request_id）。
+        var didTouchHistory = false
+        for rid in affectedRequestIDs {
+            if HTTPHistoryStore.deleteForSavedRequest(rid) > 0 { didTouchHistory = true }
+        }
+
+        var didDetach = false
+        for tab in tabManager.tabs {
+            if let tool = tab.toolInstance as? HTTPTool,
+               let bound = tool.savedRequestID, affectedRequestIDs.contains(bound) {
+                tool.detachSavedRecord()
+                didDetach = true
+            }
+        }
+        if didTouchHistory { reloadOpenHTTPTabsHistory() }
+        if didDetach { scheduleSessionSave() }
+    }
+
+    /// 让所有已打开的 HTTP 标签重读历史列表（历史被外部增删后同步面板与标签）。
+    private func reloadOpenHTTPTabsHistory() {
+        for tab in tabManager.tabs {
+            (tab.toolInstance as? HTTPTool)?.loadHistory()
+        }
     }
 }

@@ -151,8 +151,14 @@ final class HTTPTool: DevkitTool {
 
     /// 已保存时的原地更新（⌘S）；未保存时无操作，由 Shell 走另存弹框。
     @MainActor func saveViaShell() throws {
-        guard let id = savedRequestID,
-              let existing = HTTPCollectionStore.load(id: id) else { return }
+        guard let id = savedRequestID else { return }
+        guard let existing = HTTPCollectionStore.load(id: id) else {
+            // 绑定的记录已不存在（典型场景：在设置面板里把它删了，而标签还指着它）。
+            // 必须解绑再返回，否则这里静默什么都不做 —— 用户按 ⌘S 毫无反馈，
+            // 且下次 ⌘S 仍会走进同一条死路。解绑后 `isSaved` 为 false，Shell 会改走「另存为」弹框。
+            detachSavedRecord()
+            return
+        }
         try persist(name: existing.name, folderID: existing.folderID)
     }
 
@@ -160,6 +166,14 @@ final class HTTPTool: DevkitTool {
     func updateSavedName(_ name: String) {
         guard let id = savedRequestID else { return }
         HTTPCollectionStore.renameRequest(id: id, name: name)
+    }
+
+    /// 记录被外部（设置面板）删除后解绑：编辑器内容保留，但不再指向已不存在的记录，
+    /// 于是 `isSaved` 转为 false、并重新出现未保存标记 `*`，⌘S 会走“另存为”。
+    func detachSavedRecord() {
+        savedRequestID = nil
+        savedFolderID = nil
+        lastSavedRequest = nil
     }
 
     /// 从已保存记录载入到当前编辑器，并绑定为“已保存”状态。
@@ -204,7 +218,8 @@ final class HTTPTool: DevkitTool {
     // MARK: - Private
 
     private func recordHistory(for response: HTTPResponseModel?) {
-        try? HTTPHistoryStore.insert(request: request, response: response)
+        // 带上当前绑定关系：已保存标签发出的历史才能被“删除该记录时连带清理”精确命中；未保存时传 nil。
+        try? HTTPHistoryStore.insert(request: request, response: response, savedRequestID: savedRequestID)
         history = HTTPHistoryStore.recent()
     }
 }

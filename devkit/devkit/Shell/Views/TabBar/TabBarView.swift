@@ -4,6 +4,7 @@
 //
 //  左侧竖向标签栏（侧栏）：顶部为三色按钮预留空间，
 //  下方竖向列表渲染 layoutRows（分组头 + 标签），末尾追加与标签等大的“+”整行按钮。超出高度显示自绘滚动指示条，支持滚轮。
+//  最底部为固定操作条（设置按钮），位于滚动区之外，不随标签列表滚动。
 //  侧栏宽度可由用户拖拽分割线调整：行矩形跟随宽度伸缩，标题在窄到装不下时于右缘渐隐（见 FadingTitleText）。
 //
 
@@ -26,6 +27,7 @@ struct TabBarView: View {
         VStack(spacing: 0) {
             header
             tabList
+            SidebarFooterBar()
         }
         .frame(maxHeight: .infinity)
         .background(TabBarBackground())

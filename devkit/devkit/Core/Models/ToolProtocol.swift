@@ -56,6 +56,15 @@ protocol DevkitTool: AnyObject {
     /// 原地保存到既有记录；仅在 `isSaved` 为真时由 Shell 调用。未保存时由 Shell 走弹框另存路径。
     @MainActor func saveViaShell() throws
 
+    // MARK: - 生命周期（可选能力；默认空实现）
+
+    /// 标签被关闭、工具即将随标签释放时由 Shell 调用。
+    ///
+    /// 用于释放**不会因为对象被释放就自动回收**的资源：网络连接、子进程、文件句柄，
+    /// 以及「正等待外部事件」的挂起任务。这类资源若不显式收尾，会连同其持有的引用一起泄漏
+    /// （典型症状是事件循环线程、socket 长期不释放，或对象因引用环永不 deinit）。
+    @MainActor func teardownOnTabClose()
+
     /// 构造工具主视图。
     @MainActor func makeView() -> AnyView
 
@@ -71,6 +80,7 @@ extension DevkitTool {
     var supportsSave: Bool { false }
     var isSaved: Bool { false }
     @MainActor func saveViaShell() throws {}
+    @MainActor func teardownOnTabClose() {}
     @MainActor func sessionStateData() -> Data? { nil }
     @MainActor func restoreSessionState(_ data: Data) {}
 }

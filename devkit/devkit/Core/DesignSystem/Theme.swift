@@ -31,6 +31,9 @@ enum Theme {
         static let titleLineHeight: CGFloat = 16
         /// 侧栏顶部预留高度：容纳左上角三色按钮 + “+” 按钮。
         static let sidebarHeaderHeight: CGFloat = 38
+        /// 侧栏底部固定操作条高度（设置按钮所在）。
+        /// 该条位于标签滚动区之外，标签再多也不会被滚走。
+        static let sidebarFooterHeight: CGFloat = 34
         /// 单个标签行高度。
         static let tabRowHeight: CGFloat = 30
         /// 标签行圆角。
@@ -118,6 +121,8 @@ enum Theme {
         static let dragGhostOpacity: Double = 0.15
         /// 侧栏与内容区之间的分割线。
         static let splitter = Color(nsColor: .separatorColor)
+        /// 侧栏底部固定条与上方标签滚动区之间的细分隔线。
+        static let footerSeparator = Color.primary.opacity(0.08)
         /// 拖拽 / 悬停分割线时的高亮色，提示“此处可拖动调宽”。
         static let splitterActive = Color.accentColor.opacity(0.75)
         /// 浮动拖拽预览的阴影。
@@ -132,5 +137,9 @@ enum Theme {
         static let jsonLiteral = Color(red: 0.55, green: 0.26, blue: 0.66)
         /// JSON 语法着色：标点括号 / 冒号 / 逗号。
         static let jsonPunctuation = Color.primary.opacity(0.6)
+        /// 终端背景：走 AppKit 语义编辑器底色，随明暗外观自动切换，与应用整体协调（而非 SwiftTerm 默认的固定黑底）。
+        static let terminalBackground = Color(nsColor: .textBackgroundColor)
+        /// 终端前景文字：与 `terminalBackground` 配对的语义文字色。
+        static let terminalForeground = Color(nsColor: .textColor)
     }
 }
