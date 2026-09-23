@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
+    /// 外观模式（跟随系统 / 浅色 / 深色）：设置面板「通用」区写入，此处响应并全局生效。
+    @AppStorage(AppPreferences.appearanceModeKey) private var appearanceRaw = AppAppearanceMode.system.rawValue
 
     var body: some View {
         Group {
@@ -25,6 +28,12 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: phaseKey)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 驱动 SwiftUI 环境的 colorScheme（终端容器据此在 updateNSView 刷新配色）。
+        .preferredColorScheme(AppAppearanceMode.from(raw: appearanceRaw).colorScheme)
+        // 同步设置 NSApp.appearance，让分离窗口与 AppKit 语义色一起切换。
+        .onChange(of: appearanceRaw) { _, new in
+            NSApp.appearance = AppAppearanceMode.from(raw: new).nsAppearance
+        }
     }
 
     private var phaseKey: String {

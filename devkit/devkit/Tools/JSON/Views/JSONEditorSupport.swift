@@ -11,8 +11,15 @@ import AppKit
 /// 编辑器调色板：用动态 NSColor 保证浅/深色下均清晰。
 enum JSONEditorPalette {
     static let plain = NSColor.textColor
-    static let numberLabel = NSColor.tertiaryLabelColor
-    static let rulerBackground = NSColor.clear
+    /// 行号字体：用 secondaryLabelColor 而非更淡的 tertiaryLabelColor，
+    /// 以与行号栏的毛玻璃底色拉开对比，保证行号清晰可认。
+    static let numberLabel = NSColor.secondaryLabelColor
+    /// 行号标尺底：不铺纯色而是半透明微调色，叠在编辑器后方 `.ultraThinMaterial` 上，
+    /// 既保持与应用一致的毛玻璃，又让行号栏与主页面内容区「稍微做下区分」；随明暗外观自动切换。
+    static let rulerBackground = adaptive(
+        light: NSColor(white: 0, alpha: 0.05),
+        dark: NSColor(white: 1, alpha: 0.08)
+    )
 
     static let key = adaptive(light: rgb(0.11, 0.34, 0.72), dark: rgb(0.45, 0.68, 1.0))
     static let string = adaptive(light: rgb(0.72, 0.18, 0.20), dark: rgb(1.00, 0.60, 0.55))
@@ -100,6 +107,16 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// 标尺不再是不透明白底：声明为非 opaque，配合下方 `draw(_:)` 让后方 `.ultraThinMaterial` 透出。
+    override var isOpaque: Bool { false }
+
+    /// NSRulerView 默认的 `draw(_:)` 会先铺一层不透明系统底色（白色），再调 `drawHashMarksAndLabels`，
+    /// 导致我们给标尺设的半透明底叠在白底上仍旧是白，完全挡住了毛玻璃。
+    /// 这里跳过父类底填充，仅自绘（`drawHashMarksAndLabels` 内会填充半透明底 + 行号）。
+    override func draw(_ dirtyRect: NSRect) {
+        drawHashMarksAndLabels(in: dirtyRect)
+    }
 
     /// 依据总行数加宽 gutter，避免大文档行号被截断。
     func updateThickness(lineCount: Int) {

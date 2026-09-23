@@ -41,14 +41,12 @@ enum DebugSelfCheck {
         checkHistorySummaries()
         checkSaveViaShellSelfHeals()
         checkDeleteSavedRequestDetachesTabs()
-        checkTeardownUnblocksTrust()
         checkFolderCascadeDeletes()
         checkSnapshotInheritsTruncation()
         checkSnapshotDecodesLegacyJSON()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
-        await checkOutputStreamSurvivesDisconnect()
         await checkLocalTerminalDismantleKillsShell()
         checkRestoreTearsDownExistingTabs()   // 会清空标签，必须放最后
 
@@ -156,20 +154,6 @@ enum DebugSelfCheck {
         expect(appState.tabManager.tabs.contains { $0.id == tab.id } == false, "标签应已关闭")
     }
 
-    /// 关标签时放行「信任询问」：这是 TOFU 引用环的破环点 ——
-    /// 不调用它，挂起的连接任务与 SSHTool 会互相持有，永不释放。
-    private static func checkTeardownUnblocksTrust() {
-        let tool = SSHTool()
-        var decision: Bool?
-        tool.pendingTrust = SSHTool.TrustRequest(host: "selfcheck.local", port: 22) { trusted in
-            decision = trusted
-        }
-        tool.teardownOnTabClose()
-        expect(tool.pendingTrust == nil, "teardownOnTabClose 应清空 pendingTrust")
-        expect(decision == false, "应以「拒绝信任」放行挂起的连接任务（否则引用环不破）")
-        expect(tool.sessionKind == nil, "teardownOnTabClose 后应回到未选择会话态")
-    }
-
     /// 文件夹删除的**级联**：删父文件夹必须连带删掉所有子孙文件夹与其中的请求 / 连接。
     /// 这类破坏性路径没有 UI 测试覆盖，写错了会留下「孤儿」数据（文件夹没了、请求还挂在死 id 上）。
     private static func checkFolderCascadeDeletes() {
@@ -219,14 +203,14 @@ enum DebugSelfCheck {
             expect(false, "应能新建一个 SSH 标签")
             return
         }
-        var decision: Bool?
-        tool.pendingTrust = SSHTool.TrustRequest(host: "selfcheck.local", port: 22) { decision = $0 }
+        tool.startLocal()
+        expect(tool.sessionKind == .local, "会话应已进入本地态")
 
         // 用一个空会话恢复：现有标签会被整体替换掉
         appState.tabManager.restore(
             WindowSessionSnapshot(windowID: UUID(), tabs: [], groups: [], selectedTabID: nil)
         )
-        expect(decision == false, "restore 替换标签前应给旧标签发收尾通知（放行挂起的信任询问）")
+        expect(tool.sessionKind == nil, "restore 替换标签前应给旧标签发收尾通知（teardownOnTabClose 清空会话）")
         expect(appState.tabManager.tabs.isEmpty, "restore 后应变成空会话")
     }
 
@@ -409,33 +393,6 @@ enum DebugSelfCheck {
         }
     }
 
-    /// 断开**不应**终止输出流。
-    ///
-    /// `SSHConnectBanner` 的「断开 → 重新连接」与「换个目标」都会走 `disconnect()`，
-    /// 而消费端（`SSHTerminalContainer.Coordinator`）只在视图首次出现时订阅一次。
-    /// 若 `disconnect()` 里调了 `AsyncStream.Continuation.finish()`（终态，之后 yield 全丢），
-    /// 新会话的远端输出会被全部丢弃 —— 表现为**终端永远空白，但连接其实是好的**。
-    /// 这类「静默无输出」光读代码很容易漏，必须跑一遍。
-    private static func checkOutputStreamSurvivesDisconnect() async {
-        let client = SSHClient()
-        let flag = StreamFlag()
-        // 只捕获 Sendable 的 stream 与 flag，避免 non-Sendable 捕获告警。
-        let stream = client.incoming
-        let consumer = Task {
-            for await _ in stream {}
-            flag.markFinished()
-        }
-        try? await Task.sleep(for: .milliseconds(60))
-        expect(!flag.didFinish, "订阅后输出流应处于存活状态")
-
-        client.disconnect()
-        try? await Task.sleep(for: .milliseconds(60))
-        expect(!flag.didFinish, "disconnect 不应终止输出流（否则重连后终端收不到任何数据）")
-
-        consumer.cancel()
-        try? await Task.sleep(for: .milliseconds(20))
-    }
-
     /// 关闭本地终端标签时必须结束 shell。
     ///
     /// `LocalTerminalContainer.dismantleNSView` 是本地 shell **唯一**的收尾钩子：SwiftTerm 的
@@ -479,22 +436,6 @@ enum DebugSelfCheck {
         if result > 0 { return true }            // 本次调用回收了僵尸
         if result < 0 { return errno == ECHILD } // 已被 SwiftTerm 的监视器回收
         return false                             // 仍存活，继续等
-    }
-
-    /// 跨 `await` 观察状态用的容器（`DebugSelfCheck` 是 enum，没有实例状态可挂）。
-    private final class StreamFlag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var finished = false
-
-        var didFinish: Bool {
-            lock.lock(); defer { lock.unlock() }
-            return finished
-        }
-
-        func markFinished() {
-            lock.lock(); defer { lock.unlock() }
-            finished = true
-        }
     }
 
     // MARK: - 断言

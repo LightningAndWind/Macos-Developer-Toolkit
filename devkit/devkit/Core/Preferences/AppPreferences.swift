@@ -15,6 +15,9 @@ final class AppPreferences {
     /// 侧栏宽度偏好键。视图侧用 `@AppStorage` 直接绑定，保证拖拽时 SwiftUI 实时刷新。
     static let sidebarWidthKey = "devkit.sidebar.width"
 
+    /// 外观模式偏好键（跟随系统 / 浅色 / 深色）。视图侧用 `@AppStorage` 绑定，见 `AppAppearanceMode`。
+    static let appearanceModeKey = "devkit.appearance.mode"
+
     private enum Keys {
         static let dataBookmark = "devkit.dataDir.bookmark"
         static let dataPath     = "devkit.dataDir.path"

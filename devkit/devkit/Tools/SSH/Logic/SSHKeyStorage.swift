@@ -42,6 +42,8 @@ enum SSHKeyStorage {
         let name = fileName(for: profileID)
         let dest = dir.appendingPathComponent(name)
         try data.write(to: dest, options: .atomic)
+        // OpenSSH 对 `-i` 私钥强制校验权限，过宽会报 “UNPROTECTED PRIVATE KEY FILE” 拒用；限为 0600。
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dest.path)
         return name
     }
 

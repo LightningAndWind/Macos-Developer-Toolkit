@@ -17,6 +17,8 @@ struct SSHTerminalContainer: NSViewRepresentable {
     let client: SSHClient
     /// 首次可用尺寸回报（用于以合理初始尺寸连接）。
     var onSize: ((Int, Int) -> Void)?
+    /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator { Coordinator(client: client) }
 
@@ -24,13 +26,15 @@ struct SSHTerminalContainer: NSViewRepresentable {
         let view = TerminalView(frame: .zero, font: NSFont(name: "Menlo", size: 12))
         view.terminalDelegate = context.coordinator
         view.translatesAutoresizingMaskIntoConstraints = true
-        TerminalTheme.apply(to: view)
+        TerminalTheme.apply(to: view, colorScheme: colorScheme)
         context.coordinator.attach(view)
         return view
     }
 
     func updateNSView(_ nsView: TerminalView, context: Context) {
         context.coordinator.client = client
+        // 外观（明/暗）切换后重新套用配色：SwiftTerm 会烘焙颜色，需主动刷新。
+        TerminalTheme.apply(to: nsView, colorScheme: colorScheme)
         // 消费远端输出（仅启动一次）。
         context.coordinator.startConsumingIfNeeded()
     }

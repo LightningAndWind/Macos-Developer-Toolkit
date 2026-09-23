@@ -2,7 +2,7 @@
 //  SSHConnectBanner.swift
 //  devkit
 //
-//  M4：远程会话顶部的连接状态横幅、尚未选择会话的空状态入口、TOFU 信任询问弹窗。
+//  M4：远程会话顶部的连接状态横幅、尚未选择会话的空状态入口、TOFU 信任询问弹窗（密码引擎）。
 //
 
 import SwiftUI
@@ -25,10 +25,18 @@ struct SSHConnectBanner: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(.ultraThinMaterial)
+        // 材质底由使用处的 `bannerCard()`（圆角 + 阴影悬浮卡片）提供，此处不再自铺背景。
     }
 
-    private var state: SSHConnectionState { tool.client.state }
+    /// 统一状态源：私钥引擎看 `remoteRunning`（外部 ssh 无细粒度状态），密码引擎看 `client.state`。
+    private var state: SSHConnectionState {
+        if tool.activeProfile?.authKind == .key {
+            return tool.remoteRunning
+                ? .connected(host: tool.activeProfile?.host ?? "")
+                : .disconnected
+        }
+        return tool.client.state
+    }
 
     private var statusDot: some View {
         Circle()
@@ -59,7 +67,6 @@ struct SSHConnectBanner: View {
     private var sub: String? {
         switch state {
         case .failed(let m): return m
-        case .connected: return tool.activeProfile?.connectSummary
         default: return tool.activeProfile?.connectSummary
         }
     }
@@ -111,7 +118,7 @@ struct SSHEmptyPrompt: View {
             .frame(width: 320)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial)
+        // 材质底由外层终端卡片（SSHToolView.terminalSurface）提供，此处不再自铺背景。
     }
 
     private func openChooser() {
@@ -138,7 +145,7 @@ struct SSHEmptyPrompt: View {
     }
 }
 
-// MARK: - TOFU 信任询问
+// MARK: - TOFU 信任询问（密码引擎）
 
 struct SSHTrustPromptView: View {
     let host: String

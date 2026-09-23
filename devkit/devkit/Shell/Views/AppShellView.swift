@@ -9,6 +9,8 @@ import SwiftUI
 
 struct AppShellView: View {
     @Environment(AppState.self) private var appState
+    /// 观察明暗外观：深色下给底层材质叠一层半透黑 scrim 压暗（材质会把桌面亮度透上来，不压则偏浅灰）。
+    @Environment(\.colorScheme) private var colorScheme
 
     /// 侧栏宽度：写入 UserDefaults，拖拽调整后重启仍保持。
     @AppStorage(AppPreferences.sidebarWidthKey)
@@ -27,7 +29,16 @@ struct AppShellView: View {
         }
         // 让侧栏顶到窗口最上沿，为左上角三色按钮留出空间。
         .ignoresSafeArea(.container, edges: .top)
-        .background(VisualEffectBackground().ignoresSafeArea())
+        .background {
+            // 底层毛玻璃材质；深色模式在其上叠半透黑，使整体更偏黑（内容区 / 终端 / Launcher 首页随之一起变深，彼此无色差）。
+            ZStack {
+                VisualEffectBackground()
+                if colorScheme == .dark {
+                    Color.black.opacity(0.45)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .frame(minWidth: 900, minHeight: 560)
         .unifiedTitleBar()
         .confirmationDialog(

@@ -48,6 +48,17 @@ struct SettingsView: View {
 
     @State private var section: SettingsPanelSection = .http
 
+    /// 外观模式：直绑 UserDefaults，与根视图 `ContentView` 的 `@AppStorage` 共享同一键，改后即全局生效。
+    @AppStorage(AppPreferences.appearanceModeKey)
+    private var appearanceRaw: String = AppAppearanceMode.system.rawValue
+
+    private var appearanceMode: Binding<AppAppearanceMode> {
+        Binding(
+            get: { AppAppearanceMode.from(raw: appearanceRaw) },
+            set: { appearanceRaw = $0.rawValue }
+        )
+    }
+
     // 数据快照：打开面板时读一次，增删后就地刷新（面板内数据量小，全量读成本可忽略）。
     @State private var savedRequests: [HTTPSavedRequest] = []
     /// 历史只取轻量摘要（不加载响应体 blob），避免为列几百条历史把大对象读进内存。
@@ -383,6 +394,22 @@ struct SettingsView: View {
 
     private var generalPane: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // 外观：暗色 / 亮色切换开关（“跟随系统”交回系统控制）。
+            VStack(alignment: .leading, spacing: 6) {
+                Text("外观").font(.system(size: 12, weight: .semibold))
+                Picker("外观模式", selection: appearanceMode) {
+                    ForEach(AppAppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Text("选择应用亮色 / 暗色主题；终端、侧栏与内容区会同步切换。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("数据目录").font(.system(size: 12, weight: .semibold))
                 Text(AppPreferences.shared.dataDirectoryURL?.path ?? "未设置")

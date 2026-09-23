@@ -66,6 +66,19 @@ enum Theme {
         static let jsonTreeIconWidth: CGFloat = 14
         /// JSON 代码编辑器行号 gutter 最小宽度（随行数位数自动加宽）。
         static let jsonLineNumberGutterWidth: CGFloat = 44
+        /// 终端内容距面板 / 窗口边缘的留白：避免终端文字紧贴应用边，留出呼吸空间。
+        static let terminalContentInset: CGFloat = 10
+        /// 终端文字距面板内边的内边距：让文字不贴面板边（尤其底部圆角处）。
+        static let terminalInnerPadding: CGFloat = 8
+        /// 终端面板底部圆角半径：近似 macOS 窗口自带的底角圆角，使终端卡片与窗口轮廓呼应。
+        static let terminalCornerRadius: CGFloat = 10
+        /// 连接信息横幅的圆角半径（悬浮卡片）。
+        static let bannerCornerRadius: CGFloat = 10
+        /// 连接横幅与终端卡片之间的竖向间距（体现悬浮感）。
+        static let bannerTerminalGap: CGFloat = 8
+        /// 终端回滚缓冲（scrollback）行数上限：只保留最近这么多行历史（视口之上），超出后丢弃最早的行。
+        /// SwiftTerm 默认 500；提到 3000 兼顾“能往回翻更多”与内存可控（不会无限保存整会话）。
+        static let terminalScrollbackLines: Int = 3000
     }
 
     /// 字体令牌。
@@ -127,6 +140,8 @@ enum Theme {
         static let splitterActive = Color.accentColor.opacity(0.75)
         /// 浮动拖拽预览的阴影。
         static let dragShadow = Color.black.opacity(0.20)
+        /// 悬浮卡片（如连接横幅）的投影：轻而柔，营造浮于终端之上的层次。
+        static let floatingShadow = Color.black.opacity(0.18)
         /// JSON 语法着色：对象键名。
         static let jsonKey = Color(red: 0.11, green: 0.34, blue: 0.72)
         /// JSON 语法着色：字符串值。
@@ -137,9 +152,11 @@ enum Theme {
         static let jsonLiteral = Color(red: 0.55, green: 0.26, blue: 0.66)
         /// JSON 语法着色：标点括号 / 冒号 / 逗号。
         static let jsonPunctuation = Color.primary.opacity(0.6)
-        /// 终端背景：走 AppKit 语义编辑器底色，随明暗外观自动切换，与应用整体协调（而非 SwiftTerm 默认的固定黑底）。
-        static let terminalBackground = Color(nsColor: .textBackgroundColor)
-        /// 终端前景文字：与 `terminalBackground` 配对的语义文字色。
-        static let terminalForeground = Color(nsColor: .textColor)
+        /// 终端 / 编辑面板底：走 AppKit 语义「窗口」底色但降透明度，让后方 `.ultraThinMaterial`
+        /// 透出形成与应用一致的毛玻璃，同时相对主页面略带自身色调以作区分；随明暗外观自动切换。
+        /// alpha 与 TerminalTheme 保持一致（0.2，透出明显的毛玻璃），保证文字与底色对比足够。
+        static let terminalBackground = Color(nsColor: .windowBackgroundColor).opacity(0.2)
+        /// 终端前景文字：与 `terminalBackground` 配对的语义正文色。
+        static let terminalForeground = Color(nsColor: .labelColor)
     }
 }
