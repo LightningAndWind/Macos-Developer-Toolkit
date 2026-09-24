@@ -11,6 +11,7 @@ import SwiftUI
 import SwiftTerm
 
 struct LocalTerminalContainer: NSViewRepresentable {
+    let scrollModel: TerminalScrollModel
     /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
     @Environment(\.colorScheme) private var colorScheme
 
@@ -22,6 +23,7 @@ struct LocalTerminalContainer: NSViewRepresentable {
         view.translatesAutoresizingMaskIntoConstraints = true
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
         TerminalTheme.configureScroller(in: view)
+        context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
         // 回滚缓冲上限：只保留最近 N 行历史，不会无限累积整会话输出。
         view.changeScrollback(Theme.Metrics.terminalScrollbackLines)
         if !context.coordinator.didStart {
@@ -45,10 +47,24 @@ struct LocalTerminalContainer: NSViewRepresentable {
     /// 与 `SSHTerminalContainer.dismantleNSView` 同一套收尾模式。
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
         nsView.terminate()
+        coordinator.scrollMonitor?.stop()
+        coordinator.scrollMonitor = nil
     }
 
     @MainActor
     final class Coordinator {
         var didStart = false
+        var scrollMonitor: TerminalScrollerMonitor?
+
+        /// scroller 可能尚未创建；未就绪时下一轮主循环重试一次。
+        func attachScrollMonitor(to view: NSView, model: TerminalScrollModel) {
+            if let m = TerminalTheme.attachScrollMonitor(to: view, model: model) {
+                scrollMonitor = m
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.scrollMonitor = TerminalTheme.attachScrollMonitor(to: view, model: model)
+            }
+        }
     }
 }

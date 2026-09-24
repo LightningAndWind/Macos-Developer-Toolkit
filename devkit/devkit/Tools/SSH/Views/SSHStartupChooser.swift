@@ -113,6 +113,9 @@ struct SSHStartupChooser: View {
                         targetFolder: $targetFolder)
                 .padding(6)
         }
+        // 原生滚动条在系统「始终显示滚动条」下会带不透明白色轨道，改用自绘指示条（同侧栏标签栏）。
+        .scrollIndicators(.never)
+        .scrollIndicatorBar()
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.6)))

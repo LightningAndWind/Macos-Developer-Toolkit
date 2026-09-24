@@ -15,6 +15,7 @@ import SwiftTerm
 /// 远程 SSH 终端容器。
 struct SSHTerminalContainer: NSViewRepresentable {
     let client: SSHClient
+    let scrollModel: TerminalScrollModel
     /// 首次可用尺寸回报（用于以合理初始尺寸连接）。
     var onSize: ((Int, Int) -> Void)?
     /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
@@ -27,6 +28,9 @@ struct SSHTerminalContainer: NSViewRepresentable {
         view.terminalDelegate = context.coordinator
         view.translatesAutoresizingMaskIntoConstraints = true
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
+        // 与本地 / 系统 ssh 终端一致：隐藏 SwiftTerm 那条常驻白/灰轨道的右侧滚动条。
+        TerminalTheme.configureScroller(in: view)
+        context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
         context.coordinator.attach(view)
         return view
     }
@@ -41,6 +45,8 @@ struct SSHTerminalContainer: NSViewRepresentable {
 
     static func dismantleNSView(_ nsView: TerminalView, coordinator: Coordinator) {
         coordinator.stopConsuming()
+        coordinator.scrollMonitor?.stop()
+        coordinator.scrollMonitor = nil
     }
 
     @MainActor
@@ -49,10 +55,24 @@ struct SSHTerminalContainer: NSViewRepresentable {
         private weak var view: TerminalView?
         private var consumeTask: Task<Void, Never>?
         private var started = false
+        /// 观察终端 NSScroller 以驱动自绘滚动指示条（由宿主视图持有同款模型）。
+        var scrollMonitor: TerminalScrollerMonitor?
 
         init(client: SSHClient) { self.client = client }
 
         func attach(_ view: TerminalView) { self.view = view }
+
+        /// scroller 可能尚未创建；未就绪时下一轮主循环重试一次。
+        @MainActor
+        func attachScrollMonitor(to view: NSView, model: TerminalScrollModel) {
+            if let m = TerminalTheme.attachScrollMonitor(to: view, model: model) {
+                scrollMonitor = m
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.scrollMonitor = TerminalTheme.attachScrollMonitor(to: view, model: model)
+            }
+        }
 
         /// 启动一个 Task 把 client.incoming 持续 feed 到终端（主线程）。
         func startConsumingIfNeeded() {

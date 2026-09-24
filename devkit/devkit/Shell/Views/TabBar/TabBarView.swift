@@ -15,9 +15,6 @@ struct TabBarView: View {
 
     private var tabManager: TabManager { appState.tabManager }
 
-    /// 滚动几何信息，用于驱动自定义滚动指示条。
-    @State private var scroll: ScrollInfo = .zero
-
     /// 拖拽协调器：跨行共享的拖拽瞬时状态。
     @State private var drag = TabDragCoordinator()
     /// 各行在侧栏坐标空间中的实时帧（拖拽开始前用于建立布局快照）。
@@ -57,25 +54,13 @@ struct TabBarView: View {
         }
         .scrollIndicators(.never)
         .scrollContentBackground(.hidden)
+        // 自绘滚动指示条（与 SSH/SFTP 文件列表共用，见 Core/DesignSystem/ScrollIndicator.swift）。
+        .scrollIndicatorBar()
         .coordinateSpace(name: TabDragSpace.name)
         .onPreferenceChange(TabRowFramesKey.self) { value in
             // 拖拽期间冻结帧快照，避免避让偏移→帧变化→重算落点的反馈循环。
             if drag.draggedID == nil, value.frames != liveRowFrames {
                 liveRowFrames = value.frames
-            }
-        }
-        .onScrollGeometryChange(for: ScrollInfo.self) { geo in
-            ScrollInfo(
-                offset: geo.contentOffset.y,
-                content: geo.contentSize.height,
-                viewport: geo.containerSize.height
-            )
-        } action: { _, new in
-            scroll = new
-        }
-        .overlay(alignment: .trailing) {
-            if scroll.isOverflowing {
-                ScrollIndicator(info: scroll)
             }
         }
         .overlay {
@@ -143,48 +128,7 @@ private struct TabDragPreviewOverlay: View {
     }
 }
 
-// MARK: - Scroll info & custom indicator
-
-/// 滚动几何快照。
-private struct ScrollInfo: Equatable {
-    var offset: CGFloat
-    var content: CGFloat
-    var viewport: CGFloat
-
-    static let zero = ScrollInfo(offset: 0, content: 0, viewport: 0)
-
-    var isOverflowing: Bool { content > viewport + 1 }
-}
-
-/// 自绘竖向滚动指示条：浅色胶囊轨道暗示可滚动范围，半透明细胶囊指示条随滚动位置移动。
-/// 贴靠分割线一侧（列表内边距之外），不与标签行重合。
-private struct ScrollIndicator: View {
-    let info: ScrollInfo
-
-    var body: some View {
-        GeometryReader { geo in
-            let trackHeight = geo.size.height
-            let ratio = info.viewport > 0 ? min(1, trackHeight / max(info.content, 1)) : 1
-            let knobHeight = max(28, trackHeight * ratio)
-            let scrollable = max(1, info.content - info.viewport)
-            let progress = min(1, max(0, info.offset / scrollable))
-            let knobY = progress * (trackHeight - knobHeight)
-
-            ZStack(alignment: .top) {
-                Capsule()
-                    .fill(Theme.Palette.scrollTrack)
-                Capsule()
-                    .fill(Theme.Palette.scrollKnob)
-                    .frame(height: knobHeight)
-                    .offset(y: knobY)
-            }
-        }
-        .frame(width: Theme.Metrics.scrollIndicatorWidth)
-        .padding(.vertical, Theme.Metrics.scrollIndicatorVPadding)
-        .padding(.trailing, Theme.Metrics.scrollIndicatorTrailing)
-        .allowsHitTesting(false)
-    }
-}
+// MARK: - Sidebar background
 
 /// 侧栏背景：材质。
 private struct TabBarBackground: View {

@@ -70,6 +70,24 @@ enum TerminalTheme {
         }
     }
 
+    /// 递归查找终端内部的 `NSScroller`（供自绘滚动指示条观察其 doubleValue/knobProportion）。
+    static func findScroller(in view: NSView) -> NSScroller? {
+        for sub in view.subviews {
+            if let scroller = sub as? NSScroller { return scroller }
+            if let found = findScroller(in: sub) { return found }
+        }
+        return nil
+    }
+
+    /// 为终端挂上自绘滚动指示条的数据监听（观察内部 NSScroller）；找不到 scroller 时返回 nil（稍后重试）。
+    @MainActor
+    static func attachScrollMonitor(to view: NSView, model: TerminalScrollModel) -> TerminalScrollerMonitor? {
+        guard let scroller = findScroller(in: view) else { return nil }
+        let monitor = TerminalScrollerMonitor(scroller: scroller, model: model)
+        monitor.start()
+        return monitor
+    }
+
     /// 在指定 `NSAppearance` 下，把 AppKit 动态语义色解析成具体的 deviceRGB 颜色。
     private static func resolve(_ dynamicColor: NSColor, in appearance: NSAppearance) -> NSColor {
         var resolved = dynamicColor

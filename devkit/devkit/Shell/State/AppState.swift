@@ -67,6 +67,7 @@ final class AppState {
             seedDemoSessionIfRequested()
             openSettingsIfRequested()
             DebugSnapshot.runIfRequested(appState: self)
+            SheetProbe.runIfRequested(appState: self)
             await DebugSelfCheck.runIfRequested()
             return
         }

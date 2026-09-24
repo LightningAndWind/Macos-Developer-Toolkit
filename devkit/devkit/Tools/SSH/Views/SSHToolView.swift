@@ -14,6 +14,8 @@ struct SSHToolView: View {
     @Environment(AppState.self) private var appState
     /// 驱动面板 tint 随明暗变化：与终端 ANSI 色板同一外观基准，保证内边距环与终端区同色。
     @Environment(\.colorScheme) private var colorScheme
+    /// 终端自绘滚动指示条的共享模型（由各终端容器的 NSScroller 监听器更新）。
+    @State private var terminalScroll = TerminalScrollModel()
 
     var body: some View {
         content
@@ -34,7 +36,8 @@ struct SSHToolView: View {
     private var content: some View {
         switch tool.sessionKind {
         case .local:
-            terminalSurface(LocalTerminalContainer())
+            terminalSurface(LocalTerminalContainer(scrollModel: terminalScroll)
+                .terminalScrollIndicator(terminalScroll))
         case .remote:
             remoteContent
         case nil:
@@ -56,7 +59,8 @@ struct SSHToolView: View {
         if tool.activeProfile?.authKind == .key {
             // 私钥：外部 ssh 子进程。`.id(launchID)` 让重连换 id → 销毁旧容器（terminate 杀旧 ssh）并新建。
             if tool.remoteRunning, let profile = tool.activeProfile {
-                terminalSurface(RemoteSSHContainer(profile: profile))
+                terminalSurface(RemoteSSHContainer(profile: profile, scrollModel: terminalScroll)
+                    .terminalScrollIndicator(terminalScroll))
                     .id(tool.remoteLaunchID)
             } else {
                 terminalSurface(remoteDisconnectedView)
@@ -64,7 +68,8 @@ struct SSHToolView: View {
         } else {
             // 密码：进程内 NIOSSH，已连接显示终端，否则显示连接中/失败/断开占位。
             if case .connected = tool.client.state {
-                terminalSurface(SSHTerminalContainer(client: tool.client))
+                terminalSurface(SSHTerminalContainer(client: tool.client, scrollModel: terminalScroll)
+                    .terminalScrollIndicator(terminalScroll))
             } else {
                 terminalSurface(SSHTerminalPlaceholder(state: tool.client.state))
             }

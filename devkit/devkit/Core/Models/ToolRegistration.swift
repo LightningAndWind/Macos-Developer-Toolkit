@@ -13,6 +13,7 @@ enum ToolRegistration {
         let registry = ToolRegistry.shared
         registry.register(descriptor: HTTPTool.descriptor) { HTTPTool() }
         registry.register(descriptor: SSHTool.descriptor) { SSHTool() }
+        registry.register(descriptor: SFTPTool.descriptor) { SFTPTool() }
         registry.register(descriptor: JSONTool.descriptor) { JSONTool() }
     }
 }
