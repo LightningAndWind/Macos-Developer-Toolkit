@@ -87,7 +87,6 @@ devkit/devkit/
 <img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/4de47c90-bb7d-4e9d-8e86-84b596d46655" />
 
 <img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/f44063d4-f034-4aa2-a2f3-103a071a7180" />
-<img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/0176bac0-3201-4265-958d-f3073f613840" />
+<img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/2bfb5935-3f7c-44d7-9fb9-788e7a52108d" />
 
-<img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/1f22ab25-5af8-49c5-9a52-9dd3181d2ce5" />
 
