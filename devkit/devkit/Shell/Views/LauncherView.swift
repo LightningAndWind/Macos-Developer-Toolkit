@@ -2,7 +2,7 @@
 //  LauncherView.swift
 //  devkit
 //
-//  新标签入口：工具卡片 + 搜索 + 最近使用。
+//  新标签入口：工具卡片 + 搜索。
 //
 
 import SwiftUI
@@ -22,21 +22,10 @@ struct LauncherView: View {
         }
     }
 
-    private var recentTools: [ToolDescriptor] {
-        RecentToolsStore.shared.recentDescriptors().filter {
-            filteredDescriptors.contains($0)
-        }
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                if !recentTools.isEmpty && query.isEmpty {
-                    section(title: "最近使用") {
-                        recentStrip
-                    }
-                }
                 if query.isEmpty {
                     ForEach(ToolDescriptor.ToolCategory.allCases, id: \.self) { cat in
                         let items = filteredDescriptors.filter { $0.category == cat }
@@ -93,16 +82,6 @@ struct LauncherView: View {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var recentStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(recentTools) { d in
-                    ToolCard(descriptor: d, compact: true) { open(d) }
-                }
-            }
-        }
     }
 
     private func grid(_ items: [ToolDescriptor]) -> some View {
