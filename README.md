@@ -1,4 +1,3 @@
-<img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/b2ddb1d7-4c3d-4416-b4eb-da2364ce2c94" /># Macos-Developer-Toolkit (devkit)
 
 面向 macOS 开发者的本地化工具集，追求**精简、快速、低内存占用**。将日常开发中高频使用的工具聚合到一个 App 内，用标签页方式并行工作，减少在多个重量级应用之间切换的开销。
 
