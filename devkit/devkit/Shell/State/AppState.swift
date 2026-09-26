@@ -41,6 +41,8 @@ final class AppState {
     var httpChooserTabID: UUID?
     /// 新建 SSH 标签后需弹出“本地 / 新建 SSH / 选择已有”选择框的 tab。
     var sshChooserTabID: UUID?
+    /// 新建 Git 标签后需弹出“登记 / 克隆 / 打开已保存”选择框的 tab。
+    var gitChooserTabID: UUID?
 
     /// 设置面板是否展示（侧栏左下角设置按钮 / 菜单「设置…」⌘,）。
     var isSettingsPresented = false
@@ -200,6 +202,24 @@ final class AppState {
     /// 获取指定 tab 的 SSH 工具实例（非 SSH 返回 nil）。
     func sshTool(forTab id: UUID) -> SSHTool? {
         tabManager.tabs.first { $0.id == id }?.toolInstance as? SSHTool
+    }
+
+    /// 获取指定 tab 的 Git 工具实例（非 Git 返回 nil）。
+    func gitTool(forTab id: UUID) -> GitTool? {
+        tabManager.tabs.first { $0.id == id }?.toolInstance as? GitTool
+    }
+
+    /// 删除一个已登记的 Git 仓库（仅移除登记，不动磁盘工作目录与密钥），并清掉正展示它的标签。
+    func deleteGitRepo(_ id: UUID) {
+        GitRepoStore.delete(id)
+        var didClear = false
+        for tab in tabManager.tabs {
+            if let tool = tab.toolInstance as? GitTool, tool.selectedRepo?.id == id {
+                tool.clearSelection()
+                didClear = true
+            }
+        }
+        if didClear { saveSession() }
     }
 
     /// 反查某工具实例所属 tab id（用于工具视图内重新唤起本标签的选择弹窗）。

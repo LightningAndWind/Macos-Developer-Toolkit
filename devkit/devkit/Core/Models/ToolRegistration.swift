@@ -14,6 +14,7 @@ enum ToolRegistration {
         registry.register(descriptor: HTTPTool.descriptor) { HTTPTool() }
         registry.register(descriptor: SSHTool.descriptor) { SSHTool() }
         registry.register(descriptor: SFTPTool.descriptor) { SFTPTool() }
+        registry.register(descriptor: GitTool.descriptor) { GitTool() }
         registry.register(descriptor: JSONTool.descriptor) { JSONTool() }
     }
 }

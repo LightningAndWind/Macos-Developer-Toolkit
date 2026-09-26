@@ -108,6 +108,11 @@ struct LauncherView: View {
                 appState.sshChooserTabID = tab.id
                 appState.saveSession()
             }
+        } else if descriptor.id == GitTool.descriptor.id {
+            if let tab = appState.tabManager.openTool(descriptor: descriptor) {
+                appState.gitChooserTabID = tab.id
+                appState.saveSession()
+            }
         } else {
             appState.openTool(descriptor)
         }

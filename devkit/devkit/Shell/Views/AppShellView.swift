@@ -80,6 +80,17 @@ struct AppShellView: View {
                 SSHStartupChooser(tabID: tabID) { appState.sshChooserTabID = nil }
             }
         }
+        // 新建 Git 标签时的“登记 / 克隆 / 打开已保存”选择框。
+        .sheet(
+            isPresented: Binding(
+                get: { appState.gitChooserTabID != nil },
+                set: { if !$0 { appState.gitChooserTabID = nil } }
+            )
+        ) {
+            if let tabID = appState.gitChooserTabID {
+                GitStartupChooser(tabID: tabID) { appState.gitChooserTabID = nil }
+            }
+        }
         // 首次 ⌘S 的“保存位置”对话框。
         .sheet(
             isPresented: Binding(

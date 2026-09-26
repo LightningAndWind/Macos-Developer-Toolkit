@@ -19,6 +19,7 @@ import SwiftUI
 enum SettingsPanelSection: String, CaseIterable, Identifiable {
     case http
     case ssh
+    case git
     case general
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         switch self {
         case .http: return "HTTP 记录"
         case .ssh: return "SSH 连接"
+        case .git: return "Git 仓库"
         case .general: return "通用"
         }
     }
@@ -35,6 +37,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         switch self {
         case .http: return "arrow.up.arrow.down.square"
         case .ssh: return "terminal"
+        case .git: return "arrow.triangle.branch"
         case .general: return "gearshape"
         }
     }
@@ -67,6 +70,9 @@ struct SettingsView: View {
     @State private var historyTotal = 0
     @State private var profiles: [SSHProfile] = []
     @State private var folderNames: [UUID: String] = [:]
+    // Git 仓库与密钥（集中管理：改绑密钥 / 删除登记）。
+    @State private var gitRepos: [GitRepo] = []
+    @State private var gitKeys: [GitKey] = []
 
     // 集合树（无搜索词时展示层级）；搜索时退回下方扁平过滤列表。
     @State private var httpTree: [SettingsTreeNode] = []
@@ -212,6 +218,7 @@ struct SettingsView: View {
         switch section {
         case .http: httpPane
         case .ssh: sshPane
+        case .git: gitPane
         case .general: generalPane
         }
     }
@@ -524,6 +531,95 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Git 分区
+
+    private var gitPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Text("已登记仓库").font(.system(size: 12, weight: .semibold))
+                countBadge(gitRepos.count)
+                Spacer(minLength: 0)
+            }
+
+            if gitRepos.isEmpty {
+                emptyHint("还没有登记任何 Git 仓库。打开“Git 管理”工具→选择器→登记 / 克隆。")
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(gitRepos) { repo in gitRepoRow(repo) }
+                    }
+                    .padding(.bottom, 4)
+                }
+            }
+        }
+        .padding(20)
+    }
+
+    private func gitRepoRow(_ repo: GitRepo) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .foregroundStyle(repo.isValid ? Color.accentColor : .orange)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(repo.alias).font(.system(size: 12, weight: .semibold))
+                Text(repo.path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                if !repo.isValid {
+                    Text("路径失效（可能已移动 / 换设备）").font(.system(size: 10)).foregroundStyle(.orange)
+                }
+            }
+            Spacer(minLength: 8)
+            // 改绑密钥（仅换密钥，与新增仓库不同）。
+            Menu {
+                Button { rebindGitKey(repo, to: nil) } label: {
+                    gitKeyLabel("不绑定（系统默认）", checked: repo.keyID == nil)
+                }
+                if !gitKeys.isEmpty { Divider() }
+                ForEach(gitKeys) { key in
+                    Button { rebindGitKey(repo, to: key.id) } label: {
+                        gitKeyLabel("\(key.name) · \(key.algorithm.label)", checked: repo.keyID == key.id)
+                    }
+                }
+            } label: {
+                Label(currentKeyName(for: repo), systemImage: "key")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.visible)
+            .fixedSize()
+            // 删除登记。
+            Button(role: .destructive) {
+                pendingDeletion = .gitRepo(id: repo.id, name: repo.alias)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("删除仓库登记（不会删除磁盘文件与密钥）")
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.03)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.5)))
+    }
+
+    private func gitKeyLabel(_ text: String, checked: Bool) -> some View {
+        HStack { Text(text); Spacer(); if checked { Image(systemName: "checkmark") } }
+    }
+
+    private func currentKeyName(for repo: GitRepo) -> String {
+        guard let keyID = repo.keyID, let key = GitKeyStore.load(id: keyID) else { return "默认密钥" }
+        return key.name
+    }
+
+    /// 改仓库绑定密钥：回写集合并就地刷新列表。
+    private func rebindGitKey(_ repo: GitRepo, to keyID: UUID?) {
+        var updated = repo
+        updated.keyID = keyID
+        try? GitRepoStore.save(updated)
+        refresh()
+    }
+
     // MARK: - 数据
 
     private func refresh() {
@@ -532,6 +628,8 @@ struct SettingsView: View {
         historyTotal = HTTPHistoryStore.count()
         profiles = SSHProfileStore.allRequests()
         folderNames = Dictionary(uniqueKeysWithValues: SSHProfileStore.allFolders().map { ($0.id, $0.name) })
+        gitRepos = GitRepoStore.allRepos()
+        gitKeys = GitKeyStore.all()
         httpTree = Self.buildHTTPTree()
         httpMoveTargets = Self.buildMoveTargets(HTTPCollectionStore.allFolders().map { ($0.id, $0.parentID, $0.name) })
         sshTree = Self.buildSSHTree()
@@ -642,6 +740,9 @@ struct SettingsView: View {
         case .sshProfile(let id, _):
             // 仅移除记录（连带私钥文件）；已建立的终端会话不受影响。
             SSHProfileStore.delete(id)
+        case .gitRepo(let id, _):
+            // 仅移除登记 + 解绑已打开的 Git 标签（不动磁盘与密钥）。
+            appState.deleteGitRepo(id)
         case .httpFolder(let id, _):
             appState.deleteHTTPFolder(id: id)
         case .sshFolder(let id, _):
@@ -681,12 +782,14 @@ struct SettingsView: View {
 private enum PendingDeletion: Identifiable {
     case savedRequest(id: UUID, name: String)
     case sshProfile(id: UUID, name: String)
+    case gitRepo(id: UUID, name: String)
     case httpFolder(id: UUID, name: String)
     case sshFolder(id: UUID, name: String)
 
     var id: UUID {
         switch self {
-        case .savedRequest(let i, _), .sshProfile(let i, _), .httpFolder(let i, _), .sshFolder(let i, _):
+        case .savedRequest(let i, _), .sshProfile(let i, _), .gitRepo(let i, _),
+             .httpFolder(let i, _), .sshFolder(let i, _):
             return i
         }
     }
@@ -695,6 +798,7 @@ private enum PendingDeletion: Identifiable {
         switch self {
         case .savedRequest: return "删除这条已保存的请求？"
         case .sshProfile: return "删除这个 SSH 连接？"
+        case .gitRepo: return "删除这个仓库登记？"
         case .httpFolder, .sshFolder: return "删除这个文件夹？"
         }
     }
@@ -705,6 +809,8 @@ private enum PendingDeletion: Identifiable {
             return "「\(n)」将从集合中移除，此操作不可撤销。"
         case .sshProfile(_, let n):
             return "「\(n)」及其私钥文件将被删除，此操作不可撤销。"
+        case .gitRepo(_, let n):
+            return "仅移除「\(n)」的登记，磁盘上的仓库工作目录与已绑定密钥不会被删除。"
         case .httpFolder(_, let n):
             return "「\(n)」及其内部的全部文件夹与请求将被一并删除，此操作不可撤销。"
         case .sshFolder(_, let n):

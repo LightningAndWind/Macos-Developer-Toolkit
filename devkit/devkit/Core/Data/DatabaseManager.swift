@@ -119,6 +119,38 @@ final class DatabaseManager: @unchecked Sendable {
             added_at REAL NOT NULL,
             PRIMARY KEY(host, port, key_type)
         );
+        CREATE TABLE IF NOT EXISTS git_folders(
+            id TEXT PRIMARY KEY,
+            parent_id TEXT,
+            name TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_gitfolder_parent ON git_folders(parent_id);
+        CREATE TABLE IF NOT EXISTS git_repos(
+            id TEXT PRIMARY KEY,
+            folder_id TEXT,
+            alias TEXT NOT NULL,
+            path TEXT NOT NULL,
+            key_id TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            repo_json BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_gitrepo_folder ON git_repos(folder_id);
+        CREATE TABLE IF NOT EXISTS git_keys(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            algorithm TEXT NOT NULL,
+            comment TEXT,
+            public_key TEXT NOT NULL,
+            private_file TEXT,
+            has_passphrase INTEGER NOT NULL,
+            imported INTEGER NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            key_json BLOB NOT NULL
+        );
         """
         try _execLocked(sql)
     }
