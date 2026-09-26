@@ -93,8 +93,7 @@ struct GitRepoDetailView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Label(tool.status.branch, systemImage: "arrow.triangle.branch")
-                        .font(.system(size: 12, design: .monospaced))
+                    branchIndicator
                     if tool.status.ahead > 0 { chip("↑\(tool.status.ahead)", .green) }
                     if tool.status.behind > 0 { chip("↓\(tool.status.behind)", .orange) }
                     if tool.status.isRebasing { chip("变基中", .purple) }
@@ -124,6 +123,41 @@ struct GitRepoDetailView: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.5)))
+    }
+
+    /// 顶部当前分支：点击弹出本地分支列表，点选其他分支即切换（与「绑定密钥」同构：
+    /// borderless Menu + 勾选当前项 + 手指光标）。分支尚未加载或操作进行中时退回纯展示/禁用。
+    @ViewBuilder
+    private var branchIndicator: some View {
+        if tool.localBranches.isEmpty {
+            branchLabel
+        } else {
+            Menu {
+                ForEach(tool.localBranches) { branch in
+                    Button {
+                        if !branch.isCurrent { Task { await tool.checkout(branch: branch.name) } }
+                    } label: {
+                        labelRow(branch.name, checked: branch.isCurrent)
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    branchLabel
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(tool.isBusy)
+            .help("切换分支（点击选择本地分支）")
+            .pointingHandOnHover()
+        }
+    }
+
+    private var branchLabel: some View {
+        Label(tool.status.branch, systemImage: "arrow.triangle.branch")
+            .font(.system(size: 12, design: .monospaced))
     }
 
     /// 横幅图标按钮：进行中时就地显示转圈（固定尺寸，不抖布局）。
