@@ -97,6 +97,16 @@ struct GitRepoDetailView: View {
                     if tool.status.ahead > 0 { chip("↑\(tool.status.ahead)", .green) }
                     if tool.status.behind > 0 { chip("↓\(tool.status.behind)", .orange) }
                     if tool.status.isRebasing { chip("变基中", .purple) }
+                    // 冲突不再弹错误：在横幅常驻提示，点击回变更区逐块解决。
+                    if tool.hasConflict {
+                        Button {
+                            tool.section = .changes
+                        } label: {
+                            chip("⚠ 冲突 \(tool.status.conflicted.count) 个待解决", .red)
+                        }
+                        .buttonStyle(.plain)
+                        .help("点击查看冲突文件")
+                    }
                 }
                 if let repo = tool.selectedRepo {
                     Text(repo.path)

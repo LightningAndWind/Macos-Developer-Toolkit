@@ -58,8 +58,72 @@ final class GitTool: DevkitTool {
     /// 当前分支待推送的提交（驱动「未推送」分组与推送按钮可用性）。
     private(set) var unpushedCommits: [GitCommit] = []
 
+    // MARK: - 工作区文件差异 / 冲突预览
+
+    /// 当前选中查看差异的文件路径（nil = 未选中，不展示检查器）。
+    private(set) var selectedFilePath: String?
+    /// 选中文件的加载状态。
+    private(set) var isDiffLoading = false
+    private(set) var fileDiff: GitFileDiff?
+    /// 冲突文件的工作区内容（含标记行）与解析出的冲突块。
+    private(set) var conflictLines: [String] = []
+    private(set) var conflictBlocks: [GitConflictBlock] = []
+    /// 加载令牌：快速切换文件时作废旧加载的结果。
+    private var diffLoadToken = UUID()
+
+    /// 选中文件并加载其差异 / 冲突内容。
+    func selectFileForDiff(_ entry: GitFileEntry) async {
+        selectedFilePath = entry.path
+        await loadFileDiff(entry)
+    }
+
+    func clearFileSelection() {
+        selectedFilePath = nil
+        fileDiff = nil
+        conflictLines = []
+        conflictBlocks = []
+    }
+
+    /// 重新加载当前选中文件（外部动作改变内容后调用）。
+    func reloadSelectedFile() async {
+        guard let entry = status.entries.first(where: { $0.path == selectedFilePath }) else { return }
+        await loadFileDiff(entry)
+    }
+
+    private func loadFileDiff(_ entry: GitFileEntry) async {
+        guard let git = repository() else { return }
+        let token = UUID()
+        diffLoadToken = token
+        isDiffLoading = true
+        defer { if diffLoadToken == token { isDiffLoading = false } }
+        fileDiff = await git.fileDiff(entry: entry)
+        if entry.conflicted {
+            let parsed = try? await git.conflictBlocks(file: entry.path)
+            guard diffLoadToken == token else { return }
+            conflictLines = parsed?.lines ?? []
+            conflictBlocks = parsed?.blocks ?? []
+        } else {
+            conflictLines = []
+            conflictBlocks = []
+        }
+    }
+
+    /// 按块解决冲突（保留我方/对方）：回写文件后重读；若标记已全部消除则自动 `git add` 落定。
+    func resolveConflictBlock(entry: GitFileEntry, blockIndex: Int, keepOurSide: Bool) async {
+        await perform { git in
+            try await git.resolveConflictBlock(file: entry.path, keepOurSide: keepOurSide, blockIndex: blockIndex)
+            let (_, blocks) = try await git.conflictBlocks(file: entry.path)
+            if blocks.isEmpty {
+                try await git.markResolved(file: entry.path)
+            }
+        }
+    }
+
     /// 是否有待推送内容（有未推送提交 → 可推送）。
     var hasUnpushed: Bool { !unpushedCommits.isEmpty }
+
+    /// 工作区是否存在未解决的冲突文件（驱动横幅提示与失败分流）。
+    var hasConflict: Bool { !status.conflicted.isEmpty }
 
     /// 已加载的历史条数（分页）。
     private var logLoaded = 0
@@ -77,8 +141,10 @@ final class GitTool: DevkitTool {
     var errorMessage: String?
     /// 一次性成功提示（toast，自动消失）。
     private(set) var successMessage: String?
-    /// 成功提示令牌：新提示会作废旧提示的定时清除。
-    private var successToken = UUID()
+    /// 一次性警告提示（非致命失败：如 pull 遇冲突，冲突文件已列入工作区，不弹错误 alert）。
+    private(set) var warningMessage: String?
+    /// 提示令牌：新提示会作废旧提示的定时清除。
+    private var toastToken = UUID()
 
     /// 流式操作控制台（clone/fetch/pull/push/merge/rebase）逐行输出与标题。
     var consoleLines: [String] = []
@@ -178,16 +244,48 @@ final class GitTool: DevkitTool {
 
     // MARK: - 动作封装
 
-    /// 弹出一条自动消失的成功 toast。
-    private func showSuccess(_ message: String) {
-        successMessage = message
+    /// 弹出一条自动消失的提示胶囊（成功=绿 / 警告=橙），新提示立即作废旧提示的定时清除。
+    private func showToast(_ message: String, warning: Bool) {
+        if warning { warningMessage = message } else { successMessage = message }
         let token = UUID()
-        successToken = token
+        toastToken = token
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            guard let self, self.successToken == token else { return }
-            self.successMessage = nil
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard let self, self.toastToken == token else { return }
+            if warning { self.warningMessage = nil } else { self.successMessage = nil }
         }
+    }
+
+    /// 动作失败分流：若刷新后工作区存在冲突文件（如 pull 因本地改动/合并冲突中断），
+    /// 不弹错误 alert，改为警告 toast + 自动打开首个冲突文件的预览；否则照常报错。
+    private func handleFailureOrConflict(_ error: Error) {
+        if hasConflict {
+            errorMessage = nil
+            section = .changes   // 确保预览面板所在分区可见
+            showToast("存在冲突：已在变更区列出冲突文件，请逐块解决", warning: true)
+            let first = status.conflicted[0]
+            Task { await selectFileForDiff(first) }
+        } else {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// 同步类动作（pull / merge / 同步）失败分流：真正冲突时同上；
+    /// 未落定冲突的中止（如「本地改动会被覆盖，Aborting」）也用警告胶囊替代弹窗，
+    /// 被阻塞的文件本就列在变更区，用户可直接处理。
+    private func handleSyncFailureOrConflict(_ error: Error) {
+        if hasConflict {
+            handleFailureOrConflict(error)
+            return
+        }
+        let text = error.localizedDescription
+        let kept = text.split(separator: "\n").filter {
+            !$0.hasPrefix("From ") && !$0.hasPrefix("Fetching") && !Set($0).isEmpty
+        }
+        // 优先保留 error/fatal 行，其次取前三行摘要。
+        let brief = (kept.first { $0.contains("error:") || $0.contains("fatal:") }.map { [$0] } ?? Array(kept.prefix(3)))
+            .joined(separator: " ")
+        showToast("未能完成拉取：\(brief.isEmpty ? "请查看变更区后重试" : brief)", warning: true)
     }
 
     /// 执行一个非流式动作：忙锁 + 错误捕获 + 成功后刷新状态（可选成功 toast）。
@@ -204,15 +302,19 @@ final class GitTool: DevkitTool {
         do {
             try await action(GitRepository(repo: repo))
             if thenRefresh { await refreshAll() }
-            if let success { showSuccess(success) }
+            if let success { showToast(success, warning: false) }
         } catch {
-            errorMessage = error.localizedDescription
+            // 先刷新再分流：冲突导致的失败（如按块解决后手工编辑引入异常）不弹 alert。
+            await refreshStatus()
+            handleFailureOrConflict(error)
         }
     }
 
-    /// 执行一个流式动作：默认把输出弹到控制台；`presentsConsole: false` 时后台静默执行（仅忙轮询动画），失败仍弹错误。
+    /// 执行一个流式动作：默认把输出弹到控制台；`presentsConsole: false` 时后台静默执行（仅忙轮询动画）。
+    /// `syncFailure`：失败分流策略——普通动作照常弹错误；pull/merge/rebase 用冲突友好的警告提示。
     private func performStreaming(title: String,
                                   presentsConsole: Bool = true,
+                                  syncFailure: Bool = false,
                                   success: String? = nil,
                                   _ action: @escaping (GitRepository, @escaping @MainActor (String) -> Void) async throws -> Void) async {
         guard let repo = selectedRepo, repo.isValid else {
@@ -235,10 +337,12 @@ final class GitTool: DevkitTool {
         do {
             try await action(git, append)
             await refreshAll()
-            if let success { showSuccess(success) }
+            if let success { showToast(success, warning: false) }
         } catch {
-            errorMessage = error.localizedDescription
             if presentsConsole { consoleLines.append("✗ " + error.localizedDescription) }
+            // 拉取/合并/变基因冲突中断：不弹错误，改为在工作区展示冲突文件 + 警告 toast。
+            await refreshAll()
+            if syncFailure { handleSyncFailureOrConflict(error) } else { handleFailureOrConflict(error) }
         }
     }
 
@@ -256,7 +360,7 @@ final class GitTool: DevkitTool {
     // —— 远程 ——
 
     func fetch() async { await performStreaming(title: "git fetch", presentsConsole: false, success: "已 fetch") { git, line in try await git.fetch(remote: nil, onLine: line) } }
-    func pull() async { await performStreaming(title: "git pull", presentsConsole: false, success: "已拉取") { git, line in try await git.pull(onLine: line) } }
+    func pull() async { await performStreaming(title: "git pull", presentsConsole: false, syncFailure: true, success: "已拉取") { git, line in try await git.pull(onLine: line) } }
     func push() async { await performStreaming(title: "git push", presentsConsole: false, success: "已推送") { git, line in try await git.push(onLine: line) } }
 
     /// 刷新工作区：重读 status / 分支 / 历史（仅本地，不联网），驱动该按钮转圈。
@@ -289,9 +393,11 @@ final class GitTool: DevkitTool {
             try await git.pull()
             try await git.push()
             await refreshAll()
-            showSuccess("已拉取并推送")
+            showToast("已拉取并推送", warning: false)
         } catch {
-            errorMessage = error.localizedDescription
+            // 同步失败可能是冲突导致：先刷新再分流，冲突时不弹错误。
+            await refreshAll()
+            handleSyncFailureOrConflict(error)
         }
     }
 
@@ -305,7 +411,7 @@ final class GitTool: DevkitTool {
         await perform { try await $0.deleteBranch(name: name, force: force) }
     }
     func merge(branch: String) async {
-        await performStreaming(title: "git merge \(branch)") { git, line in try await git.merge(branch: branch, onLine: line) }
+        await performStreaming(title: "git merge \(branch)", syncFailure: true) { git, line in try await git.merge(branch: branch, onLine: line) }
     }
 
     // —— Stash ——
@@ -318,7 +424,7 @@ final class GitTool: DevkitTool {
     // —— 高级 ——
 
     func rebase(onto: String) async {
-        await performStreaming(title: "git rebase \(onto)") { git, line in try await git.rebase(onto: onto, onLine: line) }
+        await performStreaming(title: "git rebase \(onto)", syncFailure: true) { git, line in try await git.rebase(onto: onto, onLine: line) }
     }
     func rebaseAbort() async { await perform { try await $0.rebaseAbort() } }
     func cherryPick(hash: String) async { await perform { try await $0.cherryPick(hash: hash) } }

@@ -3,7 +3,8 @@
 //  devkit
 //
 //  「变更」区块：分三棵树——未暂存（工作区改动/未跟踪）、未提交（已暂存待提交）、未推送（有提交未推
-//  到远程）；冲突存在时置顶。底部提交栏（消息 + Amend + 提交 + 推送）。推送仅在「有未推送提交」时可点。
+//  到远程）；冲突存在时置顶。点击文件行在右侧展开检查器（差异/冲突预览 + 解决按钮）。
+//  底部提交栏（消息 + Amend + 提交 + 推送）。推送仅在「有未推送提交」时可点。
 //
 
 import SwiftUI
@@ -12,6 +13,15 @@ struct GitChangesSection: View {
     @Bindable var tool: GitTool
     @State private var message = ""
     @State private var amend = false
+    /// 文件列表宽度（可拖拽，持久化）；预览区占据其余全部宽度，保证编辑区足够大。
+    /// UserDefaults 存 Double，使用时桥接为 CGFloat（与侧栏宽度同模式）。
+    @AppStorage("git.changes.listWidth") private var storedListWidth: Double = 240
+
+    private var listWidth: CGFloat { CGFloat(storedListWidth) }
+    private var listWidthBinding: Binding<CGFloat> {
+        Binding(get: { CGFloat(storedListWidth) },
+                set: { storedListWidth = Double($0) })
+    }
 
     private var hasStaged: Bool { !tool.status.staged.isEmpty }
 
@@ -29,29 +39,41 @@ struct GitChangesSection: View {
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if !tool.status.conflicted.isEmpty {
-                        fileGroup("冲突", color: .red) {
-                            ForEach(tool.status.conflicted) { fileRow($0, kind: .conflict) }
+            HStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if !tool.status.conflicted.isEmpty {
+                            fileGroup("冲突", color: .red) {
+                                ForEach(tool.status.conflicted) { fileRow($0, kind: .conflict) }
+                            }
+                        }
+                        unstagedGroup
+                        stagedGroup
+                        unpushedGroup
+
+                        if isEmpty {
+                            Label("工作区干净，且无待推送提交", systemImage: "checkmark.circle")
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 24)
+                                .frame(maxWidth: .infinity)
                         }
                     }
-                    unstagedGroup
-                    stagedGroup
-                    unpushedGroup
-
-                    if isEmpty {
-                        Label("工作区干净，且无待推送提交", systemImage: "checkmark.circle")
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 24)
-                            .frame(maxWidth: .infinity)
-                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollIndicators(.never)
+                .scrollIndicatorBar()
+                .frame(maxWidth: tool.selectedFilePath == nil ? .infinity : listWidth)
+
+                if tool.selectedFilePath != nil {
+                    // 可拖拽分割线：把宽度让给右侧预览区，双击恢复默认。
+                    SidebarResizeDivider(width: listWidthBinding, range: 150...420, defaultWidth: 240)
+                    GitFileInspectorView(tool: tool)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .padding(.trailing, 6)
+                }
             }
-            .scrollIndicators(.never)
-            .scrollIndicatorBar()
 
             Divider()
             commitBar
@@ -101,7 +123,8 @@ struct GitChangesSection: View {
 
     // MARK: - 行
 
-    private enum RowKind { case staged, unstaged, untracked, conflict }
+    /// 行语义（决定行内/检查器按钮组合）；检查器复用。
+    enum RowKind { case staged, unstaged, untracked, conflict }
 
     private func fileGroup<Trailing: View, Content: View>(
         _ title: String, color: Color, count: Int? = nil,
@@ -120,7 +143,8 @@ struct GitChangesSection: View {
     }
 
     private func fileRow(_ entry: GitFileEntry, kind: RowKind) -> some View {
-        HStack(spacing: 8) {
+        let isSelected = tool.selectedFilePath == entry.path
+        return HStack(spacing: 8) {
             Image(systemName: kind == .untracked ? "questionmark.folder" : "doc.text")
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
@@ -145,7 +169,12 @@ struct GitChangesSection: View {
         .buttonStyle(.borderless)
         .controlSize(.small)
         .padding(.vertical, 2).padding(.horizontal, 4)
-        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 5)
+            .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.03)))
+        .contentShape(Rectangle())
+        // 点行即打开右侧检查器预览差异/冲突（手指光标提示可点）。
+        .onTapGesture { Task { await tool.selectFileForDiff(entry) } }
+        .pointingHandOnHover()
     }
 
     private func commitRow(_ commit: GitCommit) -> some View {

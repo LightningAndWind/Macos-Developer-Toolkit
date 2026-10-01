@@ -39,7 +39,8 @@ struct AppShellView: View {
             }
             .ignoresSafeArea()
         }
-        .frame(minWidth: 900, minHeight: 560)
+        // 窗口最小尺寸：为 Git 差异/冲突预览等双栏编辑场景留出足够空间（列表 150-420 + 预览区）。1pt 误差无感知，取整数值。
+        .frame(minWidth: 1000, minHeight: 640)
         .unifiedTitleBar()
         .confirmationDialog(
             "该标签有未保存内容，确定关闭？",

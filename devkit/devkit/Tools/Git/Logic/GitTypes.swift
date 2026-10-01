@@ -107,3 +107,65 @@ struct GitTag: Identifiable, Hashable, Sendable {
     var name: String
     var id: String { name }
 }
+
+// MARK: - 差异 / 冲突
+
+/// unified diff 的单行类别。
+enum GitDiffLineKind: Sendable {
+    case context, added, removed, hunkHeader, meta
+
+    /// 行前缀字符（渲染时优先用 git 原文前缀，此属性用于拼接虚拟 diff）。
+    var prefix: Character {
+        switch self {
+        case .added: return "+"
+        case .removed: return "-"
+        case .hunkHeader: return "@"
+        case .context, .meta: return " "
+        }
+    }
+}
+
+/// 一行差异内容（含左右行号，未跟踪文件只有右号）。
+struct GitDiffLine: Identifiable, Hashable, Sendable {
+    let id: Int
+    let kind: GitDiffLineKind
+    let text: String
+    let oldLine: Int?
+    let newLine: Int?
+}
+
+/// 一个文件的整体差异视图模型。
+enum GitFileDiff: Sendable {
+    /// 标准 unified diff（修改 / 新增 / 删除 / 暂存态）。
+    case unified(oldPath: String, newPath: String, lines: [GitDiffLine])
+    /// 文件过大 / 二进制 / 无内容，不提供预览。
+    case unavailable(String)
+
+    var addedCount: Int {
+        if case .unified(_, _, let lines) = self {
+            return lines.filter { $0.kind == .added }.count
+        }
+        return 0
+    }
+    var removedCount: Int {
+        if case .unified(_, _, let lines) = self {
+            return lines.filter { $0.kind == .removed }.count
+        }
+        return 0
+    }
+}
+
+/// 工作区文件里的一个冲突块（`<<<<<<<` 到 `>>>>>>>`），按文件内出现顺序编号。
+struct GitConflictBlock: Identifiable, Hashable, Sendable {
+    /// 0 基行区间：[start, end) 覆盖含标记行的整个块。
+    let startLine: Int
+    let endLine: Int
+    /// 分界线：左半 [startLine, dividerLine) 为含 `<<<<<<<` 标记的一边，右半 [dividerLine, endLine) 含 `>>>>>>>` 标记。
+    let dividerLine: Int
+    let leftLabel: String
+    let rightLabel: String
+    var id: Int { startLine }
+    /// 去掉两侧标记行后的内容区间。
+    var leftContent: Range<Int> { (startLine + 1)..<dividerLine }
+    var rightContent: Range<Int> { (dividerLine + 1) ..< Swift.max(endLine - 1, dividerLine + 1) }
+}

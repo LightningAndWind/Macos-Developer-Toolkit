@@ -185,6 +185,122 @@ struct GitRepository {
         return out.stdout.split(separator: "\n").map { GitTag(name: String($0)) }
     }
 
+    // MARK: - 差异查看
+
+    /// 单个文件相对 HEAD 的差异。已暂存取索引版本；未跟踪文件用 `--no-index` 对 /dev/null 比较。
+    /// 无实际差异（如新仓库里已暂存的新文件）时退回直接读文件内容拼成全新增的预览。
+    func fileDiff(entry: GitFileEntry) async -> GitFileDiff {
+        if entry.untracked {
+            let abs = URL(fileURLWithPath: path).appendingPathComponent(entry.path).path
+            let out = try? await GitRunner.git(
+                ["-c", "core.quotepath=false", "diff", "--no-index", "--unified=3", "--no-color", "/dev/null", abs],
+                at: path, environment: environment)
+            return Self.parseUnifiedDiff(out?.stdout ?? "", fallbackPath: entry.path)
+                ?? .unavailable("无法读取文件内容")
+        }
+        // 既有暂存又有工作区改动时优先展示工作区版本（与行所在分组一致由调用方保证）。
+        let staged = entry.isStaged && !entry.hasUnstaged
+        var args = ["-c", "core.quotepath=false", "diff", "--unified=3", "--no-color", "-M"]
+        if staged { args.append("--cached") }
+        args.append(contentsOf: ["--", entry.path])
+        let out = try? await run(args)
+        if let diff = Self.parseUnifiedDiff(out?.stdout ?? "", fallbackPath: entry.path) { return diff }
+        // 新仓库尚无 HEAD 时，已暂存新增文件无差异可比：直接展示文件内容（全新增）。
+        if entry.indexStatus == "A" {
+            let abs = URL(fileURLWithPath: path).appendingPathComponent(entry.path).path
+            if let text = try? String(contentsOfFile: abs, encoding: .utf8) {
+                return Self.virtualNewFile(path: entry.path, text: text)
+            }
+        }
+        return .unavailable("没有可显示的差异（可能是二进制文件或内容未变化）")
+    }
+
+    /// 把文件内容拼成「全部新增」的虚拟 diff（无 HEAD 可比时的预览）。
+    static func virtualNewFile(path: String, text: String) -> GitFileDiff {
+        let lines = text.components(separatedBy: "\n")
+        var out: [GitDiffLine] = []
+        var n = 0
+        for (i, line) in lines.enumerated() {
+            // 末尾换行拆出的空尾行不展示。
+            if i == lines.count - 1, line.isEmpty { break }
+            out.append(GitDiffLine(id: n, kind: .added, text: line, oldLine: nil, newLine: n + 1))
+            n += 1
+        }
+        return .unified(oldPath: "/dev/null", newPath: path, lines: out)
+    }
+
+    /// 解析 `git diff` 文本为行列表；无 `diff --git` 头时返回 nil（调用方走占位分支）。
+    static func parseUnifiedDiff(_ text: String, fallbackPath: String) -> GitFileDiff? {
+        var lines = text.components(separatedBy: "\n")
+        // 去掉末尾换行拆出的空尾行。
+        if lines.last?.isEmpty == true { lines.removeLast() }
+        guard let headerIdx = lines.firstIndex(where: { $0.hasPrefix("diff --git ") }) else { return nil }
+        var oldPath = fallbackPath
+        var newPath = fallbackPath
+        if let b = lines[headerIdx].range(of: " b/"), lines[headerIdx].hasPrefix("diff --git ") {
+            newPath = String(lines[headerIdx][b.upperBound...])
+        }
+        var result: [GitDiffLine] = []
+        var n = 0
+        var oldLine: Int?, newLine: Int?
+        func emit(_ kind: GitDiffLineKind, _ body: String) {
+            var o = oldLine, w = newLine
+            switch kind {
+            case .added: w = (w ?? 0) + 1
+            case .removed: o = (o ?? 0) + 1
+            case .context: o = (o ?? 0) + 1; w = (w ?? 0) + 1
+            default: break
+            }
+            oldLine = o; newLine = w
+            let id = n; n += 1
+            result.append(GitDiffLine(id: id, kind: kind, text: body, oldLine: o, newLine: w))
+        }
+        var idx = headerIdx
+        while idx < lines.count {
+            let line = lines[idx]
+            idx += 1
+            if line.hasPrefix("@@") {
+                // `@@ -a,b +c,d @@`：取两侧起始行号；`-0,0`/`-1` 视为无旧侧。
+                let range = line.drop(while: { $0 != "-" })
+                let parts = range.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).map(String.init)
+                func startOf(_ s: String) -> Int? {
+                    let num = s.drop(while: { !$0.isNumber })
+                    guard let v = Int(num.prefix(while: { $0.isNumber })) else { return nil }
+                    return v == 0 && s.hasPrefix("0,") ? nil : v
+                }
+                if parts.count == 2 {
+                    oldLine = startOf(parts[0])
+                    newLine = startOf(parts[1])
+                }
+                emit(.hunkHeader, line)
+            } else if line.hasPrefix("index ") || line.hasPrefix("--- ") || line.hasPrefix("+++ ")
+                        || line.hasPrefix("new file") || line.hasPrefix("deleted file")
+                        || line.hasPrefix("similarity") || line.hasPrefix("rename ") {
+                if line.hasPrefix("--- ") { oldPath = trimDiffEndpoint(String(line.dropFirst(4))) }
+                if line.hasPrefix("+++ ") { newPath = trimDiffEndpoint(String(line.dropFirst(4))) }
+                continue
+            } else if line.hasPrefix("diff --git ") {
+                // 单文件预期不应出现第二个头；若出现（如重命名）以最后一个为准。
+                continue
+            } else if line.hasPrefix("+") {
+                emit(.added, String(line.dropFirst()))
+            } else if line.hasPrefix("-") {
+                emit(.removed, String(line.dropFirst()))
+            } else if line.hasPrefix("\\") {
+                continue // "\ No newline at end of file"
+            } else {
+                emit(.context, line.hasPrefix(" ") ? String(line.dropFirst()) : line)
+            }
+        }
+        return .unified(oldPath: oldPath, newPath: newPath, lines: result)
+    }
+
+    /// `--- a/path` / `+++ b/path` 去掉 a/ b/ 前缀；/dev/null 保留。
+    private static func trimDiffEndpoint(_ s: String) -> String {
+        if s.hasPrefix("a/") || s.hasPrefix("b/") { return String(s.dropFirst(2)) }
+        return s
+    }
+
     // MARK: - 暂存 / 提交
 
     func stage(paths: [String]) async throws {
@@ -330,6 +446,51 @@ struct GitRepository {
         try await require(["add", "--", file])
     }
     func markResolved(file: String) async throws { try await require(["add", "--", file]) }
+
+    /// 读取工作区文件内容并解析冲突块（`<<<<<<<` / `=======` / `>>>>>>>`）。
+    func conflictBlocks(file: String) async throws -> (lines: [String], blocks: [GitConflictBlock]) {
+        let abs = URL(fileURLWithPath: path).appendingPathComponent(file).path
+        let text = try String(contentsOfFile: abs, encoding: .utf8)
+        return Self.parseConflictLines(text)
+    }
+
+    /// 解析带冲突标记的文本：返回行列表与冲突块区间（0 基）。
+    static func parseConflictLines(_ text: String) -> (lines: [String], blocks: [GitConflictBlock]) {
+        var lines = text.components(separatedBy: "\n")
+        if lines.last?.isEmpty == true { lines.removeLast() }
+        var blocks: [GitConflictBlock] = []
+        var start: Int?
+        var divider: Int?
+        var leftLabel = ""
+        var rightLabel = ""
+        for (i, line) in lines.enumerated() {
+            if line.hasPrefix("<<<<<<<") {
+                if start == nil { start = i; leftLabel = String(line.dropFirst(7)).trimmingCharacters(in: .whitespaces) }
+            } else if line.hasPrefix("======="), start != nil, divider == nil {
+                divider = i
+                rightLabel = String(line.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix(">>>>>>>"), let s = start, let d = divider {
+                blocks.append(GitConflictBlock(startLine: s, endLine: i + 1, dividerLine: d,
+                                               leftLabel: leftLabel, rightLabel: rightLabel))
+                start = nil; divider = nil
+            }
+        }
+        return (lines, blocks)
+    }
+
+    /// 按块解决冲突：保留选中的一边内容（去标记行）回写文件；全部解决后由调用方刷新。
+    /// `blockIndex` 用冲突块序号而非行号（行号会随前序块解决而偏移）。
+    func resolveConflictBlock(file: String, keepOurSide: Bool, blockIndex: Int) async throws {
+        let (lines, blocks) = try await conflictBlocks(file: file)
+        guard blocks.indices.contains(blockIndex) else { return }
+        let block = blocks[blockIndex]
+        let kept = keepOurSide ? Array(lines[block.leftContent]) : Array(lines[block.rightContent])
+        var merged = Array(lines[..<block.startLine])
+        merged.append(contentsOf: kept)
+        merged.append(contentsOf: lines[block.endLine...])
+        let abs = URL(fileURLWithPath: path).appendingPathComponent(file).path
+        try merged.joined(separator: "\n").write(toFile: abs, atomically: true, encoding: .utf8)
+    }
 
     // MARK: - 可选：把绑定密钥写入仓库 config（供脱离应用的终端使用）
 

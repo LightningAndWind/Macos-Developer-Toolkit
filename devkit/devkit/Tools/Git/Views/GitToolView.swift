@@ -26,15 +26,20 @@ struct GitToolView: View {
         // 选中仓库 / 切换分区是低频事件：即时落盘会话快照，保证重开 App（含开发重编译/强杀）能恢复上次仓库。
         .onChange(of: tool.selectedRepo?.id) { _, _ in appState.saveSession() }
         .onChange(of: tool.section) { _, _ in appState.saveSession() }
-        // 成功提示 toast：顶部浮出，自动消失。
+        // 提示 toast（成功=绿 / 警告=橙）：顶部浮出，自动消失。
         .overlay(alignment: .top) {
             if let msg = tool.successMessage {
-                GitSuccessToast(text: msg)
+                GitToast(text: msg, color: .green, symbol: "checkmark.circle.fill")
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else if let msg = tool.warningMessage {
+                GitToast(text: msg, color: .orange, symbol: "exclamationmark.triangle.fill")
                     .padding(.top, 10)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(Theme.Motion.content, value: tool.successMessage)
+        .animation(Theme.Motion.content, value: tool.warningMessage)
         // 流式操作实时控制台。
         .sheet(isPresented: $tool.isConsolePresented) {
             GitOutputConsoleView(tool: tool)
@@ -70,17 +75,23 @@ private struct GitEmptyPrompt: View {
     }
 }
 
-/// 顶部居中的成功提示胶囊（毛玻璃背景 + 对号），不阻断操作。
-private struct GitSuccessToast: View {
+/// 顶部居中的提示胶囊（毛玻璃背景）：成功绿对号 / 警告橙三角，不阻断操作。
+private struct GitToast: View {
     let text: String
+    let color: Color
+    let symbol: String
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: symbol).foregroundStyle(color)
             Text(text).font(.system(size: 12, weight: .medium))
+                // 长报错摘要限两行，避免胶囊横满整个窗口。
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 12).padding(.vertical, 7)
+        .frame(maxWidth: 520)
         .background(Capsule().fill(.regularMaterial))
-        .overlay(Capsule().strokeBorder(Color.green.opacity(0.35)))
+        .overlay(Capsule().strokeBorder(color.opacity(0.35)))
         .shadow(color: Theme.Palette.floatingShadow, radius: 6, y: 2)
     }
 }
