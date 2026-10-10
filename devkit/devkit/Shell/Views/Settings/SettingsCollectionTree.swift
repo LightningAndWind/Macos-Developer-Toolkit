@@ -4,7 +4,11 @@
 //
 //  设置面板里 HTTP / SSH 分区共用的多级文件夹树。与具体数据模型解耦：
 //  外层把 HTTPCollectionStore / SSHProfileStore 的 buildTree() 结果映射成
-//  `SettingsTreeNode`，本视图只负责渲染 + 三类动作（删除记录 / 删除文件夹(连同内容) / 移动记录到文件夹）。
+//  `SettingsTreeNode`，本视图只负责渲染 + 四类动作
+//  （编辑记录 / 删除记录 / 删除文件夹(连同内容) / 移动记录到文件夹）。
+//
+//  「编辑记录」是可选能力：HTTP 记录在自己的标签里编辑，故不传 `onEditRecord`，
+//  此时行内不出现铅笔按钮、右键菜单也没有「编辑…」项。
 //
 //  采用手写递归行（逐级固定缩进 + 固定展开槽），与 HTTP/SSH 选择器里的树一致：
 //  SwiftUI OutlineGroup 在 ScrollView 内缩进错乱且默认折叠，故不用它。
@@ -63,6 +67,8 @@ struct SettingsCollectionTreeView: View {
     let onDeleteRecord: (SettingsTreeNode) -> Void
     let onDeleteFolder: (SettingsTreeNode) -> Void
     let onMoveRecord: (SettingsTreeNode, UUID?) -> Void
+    /// 编辑记录；`nil` = 该分区不支持就地编辑（不显示编辑入口）。
+    var onEditRecord: ((SettingsTreeNode) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -73,7 +79,8 @@ struct SettingsCollectionTreeView: View {
                                 collapsed: $collapsed,
                                 onDeleteRecord: onDeleteRecord,
                                 onDeleteFolder: onDeleteFolder,
-                                onMoveRecord: onMoveRecord)
+                                onMoveRecord: onMoveRecord,
+                                onEditRecord: onEditRecord)
             }
         }
     }
@@ -89,12 +96,15 @@ private struct SettingsTreeRow: View {
     let onDeleteRecord: (SettingsTreeNode) -> Void
     let onDeleteFolder: (SettingsTreeNode) -> Void
     let onMoveRecord: (SettingsTreeNode, UUID?) -> Void
+    let onEditRecord: ((SettingsTreeNode) -> Void)?
 
     @State private var isHovering = false
 
     private var isFolder: Bool { node.isFolder }
     private var children: [SettingsTreeNode] { node.children ?? [] }
     private var isExpanded: Bool { !collapsed.contains(node.id) }
+    /// 仅记录、且外层提供了编辑回调时才有编辑入口。
+    private var canEdit: Bool { !isFolder && onEditRecord != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -107,7 +117,8 @@ private struct SettingsTreeRow: View {
                                     collapsed: $collapsed,
                                     onDeleteRecord: onDeleteRecord,
                                     onDeleteFolder: onDeleteFolder,
-                                    onMoveRecord: onMoveRecord)
+                                    onMoveRecord: onMoveRecord,
+                                    onEditRecord: onEditRecord)
                 }
             }
         }
@@ -131,6 +142,8 @@ private struct SettingsTreeRow: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        // 双击记录 = 编辑（与「编辑…」菜单项同一动作）。
+        .onTapGesture(count: 2) { if canEdit { onEditRecord?(node) } }
         .contextMenu { rowMenu }
     }
 
@@ -185,18 +198,36 @@ private struct SettingsTreeRow: View {
 
     @ViewBuilder
     private var trailingActions: some View {
-        Button {
-            isFolder ? onDeleteFolder(node) : onDeleteRecord(node)
-        } label: {
-            Image(systemName: "trash")
+        HStack(spacing: 2) {
+            if canEdit {
+                iconButton(symbol: "pencil",
+                           tint: .secondary,
+                           help: "编辑该记录（名称 / 目录 / 主机等）") {
+                    onEditRecord?(node)
+                }
+            }
+            iconButton(symbol: "trash",
+                       tint: isHovering ? Color.red.opacity(0.85) : Color.secondary,
+                       help: isFolder ? "删除该文件夹及其全部内容" : "删除该记录") {
+                isFolder ? onDeleteFolder(node) : onDeleteRecord(node)
+            }
+        }
+    }
+
+    private func iconButton(symbol: String,
+                            tint: Color,
+                            help: String,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
                 .font(.system(size: 11))
-                .foregroundStyle(isHovering ? Color.red.opacity(0.85) : Color.secondary)
+                .foregroundStyle(tint)
                 .frame(width: 22, height: 20)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .opacity(isHovering ? 1 : 0.5)
-        .help(isFolder ? "删除该文件夹及其全部内容" : "删除该记录")
+        .help(help)
     }
 
     @ViewBuilder
@@ -219,6 +250,10 @@ private struct SettingsTreeRow: View {
         if isFolder {
             Button("删除文件夹（连同内容）", role: .destructive) { onDeleteFolder(node) }
         } else {
+            if canEdit {
+                Button("编辑…") { onEditRecord?(node) }
+                Divider()
+            }
             Button("删除", role: .destructive) { onDeleteRecord(node) }
             if !moveTargets.isEmpty {
                 Menu("移动到") {

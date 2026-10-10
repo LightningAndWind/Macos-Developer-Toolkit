@@ -55,7 +55,7 @@ struct SFTPProfilePicker: View {
         .frame(width: 420, height: 360)
         .onAppear { refresh() }
         .sheet(item: $editing) { profile in
-            SSHProfileEditorView(draft: profile, isNew: editingIsNew) { saved, connect in
+            SSHProfileEditorView(draft: profile, isNew: editingIsNew, forcedKind: .remote) { saved, connect in
                 refresh()
                 if connect { connectSide(saved) }
             }
@@ -98,7 +98,8 @@ struct SFTPProfilePicker: View {
     }
 
     private func refresh() {
-        profiles = SSHProfileStore.allRequests()
+        // SFTP 只连远程主机：本地终端记录（同存于 ssh_profiles）不参与。
+        profiles = SSHProfileStore.allRequests().filter { $0.isRemote }
     }
 
     /// 连接在后台进行：弹窗关闭，连接中/失败/成功状态显示在对应面板上。

@@ -36,8 +36,11 @@ struct SSHToolView: View {
     private var content: some View {
         switch tool.sessionKind {
         case .local:
-            terminalSurface(LocalTerminalContainer(scrollModel: terminalScroll)
+            // `.id(launchID)`：从另一条本地记录打开 / 重开时换 id → 以新目录重建 shell。
+            terminalSurface(LocalTerminalContainer(workingDirectory: tool.localWorkingDirectory,
+                                                   scrollModel: terminalScroll)
                 .terminalScrollIndicator(terminalScroll))
+                .id(tool.localLaunchID)
         case .remote:
             remoteContent
         case nil:

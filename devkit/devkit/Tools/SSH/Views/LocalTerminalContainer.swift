@@ -3,7 +3,8 @@
 //  devkit
 //
 //  M4：本地 shell 终端。用 SwiftTerm 的 LocalProcessTerminalView（内部自带 PTY 与进程桥接），
-//  在 makeNSView 时启动用户默认 shell。选「本地」的新标签即呈现此视图。
+//  在 makeNSView 时启动用户默认 shell。选「本地」的新标签即呈现此视图；
+//  从本地记录打开时以记录里的「默认进入的文件夹」作为工作目录。
 //
 
 import AppKit
@@ -11,6 +12,8 @@ import SwiftUI
 import SwiftTerm
 
 struct LocalTerminalContainer: NSViewRepresentable {
+    /// 打开时的工作目录；nil / 空白 / 目录不存在 → 回落到用户个人目录。
+    var workingDirectory: String?
     let scrollModel: TerminalScrollModel
     /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
     @Environment(\.colorScheme) private var colorScheme
@@ -29,8 +32,9 @@ struct LocalTerminalContainer: NSViewRepresentable {
         if !context.coordinator.didStart {
             context.coordinator.didStart = true
             let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-            // 默认进入用户 home（GUI 启动的进程 cwd 常为 /，不显式指定会停在根目录）。
-            view.startProcess(executable: shell, args: ["-l"], currentDirectory: NSHomeDirectory())
+            // 记录里配了目录就进该目录；否则进用户 home
+            //（GUI 启动的进程 cwd 常为 /，不显式指定会停在根目录）。
+            view.startProcess(executable: shell, args: ["-l"], currentDirectory: resolvedWorkingDirectory)
         }
         return view
     }
@@ -49,6 +53,17 @@ struct LocalTerminalContainer: NSViewRepresentable {
         nsView.terminate()
         coordinator.scrollMonitor?.stop()
         coordinator.scrollMonitor = nil
+    }
+
+    /// 校验后的起始目录：目录不存在（记录里的路径被删 / 改名）时回落到 home，
+    /// 否则 `startProcess` 会因 cwd 无效而启动失败，标签表现为空白终端。
+    private var resolvedWorkingDirectory: String {
+        guard let dir = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !dir.isEmpty else { return NSHomeDirectory() }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dir, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return NSHomeDirectory() }
+        return dir
     }
 
     @MainActor

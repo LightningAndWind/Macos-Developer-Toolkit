@@ -67,7 +67,13 @@ struct SSHConnectBanner: View {
     private var sub: String? {
         switch state {
         case .failed(let m): return m
-        default: return tool.activeProfile?.connectSummary
+        default:
+            guard let profile = tool.activeProfile else { return nil }
+            // 配了默认目录就一并展示，方便确认「登录后落在哪」是否符合预期。
+            if let dir = profile.normalizedWorkingDirectory {
+                return "\(profile.connectSummary) · \(dir)"
+            }
+            return profile.connectSummary
         }
     }
 
@@ -111,7 +117,7 @@ struct SSHEmptyPrompt: View {
                 actionCard(icon: "house", title: "本地终端", subtitle: "打开本机 shell（默认进入个人目录）") {
                     tool.startLocal()
                 }
-                actionCard(icon: "network", title: "新建 / 选择 SSH 连接", subtitle: "从弹窗选择已有或新建") {
+                actionCard(icon: "network", title: "打开 / 新建记录", subtitle: "本地目录或 SSH 主机，从弹窗选择") {
                     openChooser()
                 }
             }

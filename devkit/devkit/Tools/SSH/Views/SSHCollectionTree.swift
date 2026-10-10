@@ -3,7 +3,8 @@
 //  devkit
 //
 //  M4：SSH 集合多级文件夹树（手写递归行视图，逐级缩进对齐）。仿 HTTPTreeView。
-//  点击连接 = onOpen；点击文件夹 = 选为“新建文件夹”目标父级（targetFolder），展开/折叠走三角。
+//  点击记录 = onOpen（本地记录打开终端 / 远程记录连接主机）；点击文件夹 = 选为“新建文件夹”目标父级（targetFolder），
+//  展开/折叠走三角。
 //
 
 import SwiftUI
@@ -25,7 +26,7 @@ struct SSHTreeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if nodes.isEmpty {
-                Text("还没有保存的连接")
+                Text("还没有保存的记录")
                     .font(.callout).foregroundStyle(.secondary).padding(10)
             } else {
                 ForEach(nodes) { node in
@@ -71,7 +72,7 @@ private struct SSHTreeRow: View {
         HStack(spacing: 6) {
             Color.clear.frame(width: CGFloat(depth) * kIndent, height: 1)
             chevron
-            Image(systemName: isFolder ? "folder" : "terminal")
+            Image(systemName: iconName)
                 .font(.system(size: 12))
                 .foregroundStyle(isFolder ? Color.secondary : Color.accentColor)
                 .frame(width: kIconWidth)
@@ -81,7 +82,7 @@ private struct SSHTreeRow: View {
                     .lineLimit(1)
             } else if case .profile(let p) = node.kind {
                 Text(p.name).font(.system(size: 13)).lineLimit(1)
-                Text(p.connectSummary).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                Text(p.displaySummary).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -95,11 +96,18 @@ private struct SSHTreeRow: View {
         .contextMenu { rowMenu }
     }
 
+    /// 文件夹用 folder；记录按类型区分——本地终端用 house，远程用 terminal。
+    private var iconName: String {
+        if isFolder { return "folder" }
+        if case .profile(let p) = node.kind, p.isLocal { return "house" }
+        return "terminal"
+    }
+
     @ViewBuilder
     private var rowMenu: some View {
         switch node.kind {
         case .profile(let p):
-            Button("连接") { onOpen(p) }
+            Button(p.isLocal ? "打开" : "连接") { onOpen(p) }
             Button("编辑…") { onEdit(p) }
             Divider()
             Button("删除", role: .destructive) { onDelete(p) }
