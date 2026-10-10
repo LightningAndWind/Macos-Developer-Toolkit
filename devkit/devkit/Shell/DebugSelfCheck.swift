@@ -44,6 +44,7 @@ enum DebugSelfCheck {
         checkFolderCascadeDeletes()
         checkSnapshotInheritsTruncation()
         checkSnapshotDecodesLegacyJSON()
+        checkSSHRecordCompatibility()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
@@ -269,6 +270,74 @@ enum DebugSelfCheck {
                "新格式快照应原样读出 isBodyTruncated=true")
         expect((try? JSONDecoder().decode(HTTPResponseSnapshot.self, from: Data(newFalse.utf8)))?.isBodyTruncated == false,
                "新格式快照应原样读出 isBodyTruncated=false")
+    }
+
+    /// SSH 会话记录：后补字段（`kind` / `workingDirectory`）的兼容性，以及「本地记录 + 默认目录」的落库与归类。
+    ///
+    /// 要害一：`kind` 是后加的**非可选**字段。若交给合成解码，旧数据（无该键）会抛 `keyNotFound`，
+    /// 而 `allRequests()` 是 `try?` 吞错 —— 表现为升级后旧连接从列表里整片静默消失。
+    /// 要害二：本地记录与远程记录同表存放，必须能区分、能进树、能落盘默认目录。
+    /// 要害三：`moveProfile` 若只 UPDATE 标量列，`buildTree()`（以 blob 为准）看不到变化 → 移动后原地不动。
+    private static func checkSSHRecordCompatibility() {
+        // 1) 旧格式 JSON（无 kind / workingDirectory 键）必须能解码，并回退为「远程 + 无目录」。
+        let legacy = #"{"id":"A1111111-1111-1111-1111-111111111111","name":"旧连接","host":"legacy.local","port":22,"username":"root","authKind":"password","createdAt":700000000,"updatedAt":700000000}"#
+        do {
+            let old = try JSONDecoder().decode(SSHProfile.self, from: Data(legacy.utf8))
+            expect(old.isRemote, "旧格式记录（无 kind 键）应回退为远程会话")
+            expect(old.workingDirectory == nil, "旧格式记录应回退为无默认目录")
+            expect(old.host == "legacy.local" && old.username == "root", "旧格式记录其余字段应保持原值")
+        } catch {
+            expect(false, "旧格式 SSH 记录应能解码（实际失败：\(error.localizedDescription)）—— 否则升级后旧连接会整条静默消失")
+        }
+
+        // 2) 新格式（本地记录 + 目录）应原样读出。
+        let localJSON = #"{"id":"B2222222-2222-2222-2222-222222222222","kind":"local","name":"前端项目","workingDirectory":"/tmp/devkit-selfcheck-proj","host":"","port":22,"username":"","authKind":"password","createdAt":700000000,"updatedAt":700000000}"#
+        expect((try? JSONDecoder().decode(SSHProfile.self, from: Data(localJSON.utf8)))?.isLocal == true,
+               "新格式本地记录应读出 kind=local")
+        expect((try? JSONDecoder().decode(SSHProfile.self, from: Data(localJSON.utf8)))?.normalizedWorkingDirectory == "/tmp/devkit-selfcheck-proj",
+               "新格式本地记录应读出默认目录")
+
+        // 3) 落库 → 读回 → 进树。
+        guard let folder = SSHProfileStore.createFolder(name: "自检记录夹", parentID: nil) else {
+            expect(false, "应能创建自检文件夹")
+            return
+        }
+        let local = SSHProfile(folderID: nil, kind: .local, name: "自检本地记录",
+                               workingDirectory: "/tmp/devkit-selfcheck-proj")
+        try? SSHProfileStore.save(local)
+        let loaded = SSHProfileStore.load(id: local.id)
+        expect(loaded?.isLocal == true, "本地记录应能落库并读回（kind=local）")
+        expect(loaded?.normalizedWorkingDirectory == "/tmp/devkit-selfcheck-proj", "本地记录的默认目录应持久化")
+        expect(SSHProfileStore.buildTree().contains { $0.id == local.id }, "本地记录应出现在集合树里")
+
+        // 4) 移动到文件夹后，树里应真的换了位置（blob 与冗余列同步）。
+        SSHProfileStore.moveProfile(id: local.id, to: folder.id)
+        func folderContains(_ node: SSHCollectionNode) -> Bool {
+            if node.id == folder.id { return (node.children ?? []).contains { $0.id == local.id } }
+            return (node.children ?? []).contains(where: folderContains)
+        }
+        expect(SSHProfileStore.buildTree().contains(where: folderContains),
+               "移动记录到文件夹后应反映在集合树里（只改标量列会原地不动）")
+
+        // 5) 展示摘要：本地显示目录（home 缩写为 ~），远程保持 user@host。
+        let inHome = SSHProfile(kind: .local, name: "home",
+                                workingDirectory: NSHomeDirectory() + "/Work")
+        expect(inHome.displaySummary == "~/Work", "本地记录的摘要应把 home 前缀缩写为 ~")
+        expect(local.displaySummary == "/tmp/devkit-selfcheck-proj", "本地记录的摘要应显示其目录")
+        var remote = SSHProfile(name: "r", host: "h", username: "u")
+        remote.workingDirectory = "/var/www"
+        expect(remote.displaySummary == "u@h", "远程记录的摘要应保持 user@host")
+
+        // 6) 远端默认目录命令的拼接（含单引号路径的转义）。
+        remote.workingDirectory = "/tmp/a'b"
+        expect(remote.sshRemoteCommand == "cd '/tmp/a'\\''b'; exec \"$SHELL\" -l",
+               "远端命令应对含单引号的路径正确转义")
+        expect(remote.remoteChangeDirectoryCommand == "cd '/tmp/a'\\''b'",
+               "NIOSSH 的 cd 命令应同样转义")
+
+        // 收尾：删文件夹会级联删掉其中的记录。
+        SSHProfileStore.deleteFolder(id: folder.id)
+        expect(SSHProfileStore.load(id: local.id) == nil, "删除文件夹应级联删除其中的本地记录")
     }
 
     /// 自检夹具服务器的基地址（`DEVKIT_SELFCHECK_HTTP_BASE`）。

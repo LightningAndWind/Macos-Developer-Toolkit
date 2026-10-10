@@ -97,6 +97,12 @@ final class SSHClient {
             nio.shellChannel = shell
             state = .connected(host: profile.host)
 
+            // 记录里配了「默认进入的文件夹」：会话建立后立即下发 cd，与外部 ssh 引擎行为对齐。
+            // 远端 pty 会缓冲这段输入，即便 shell 尚未完全就绪也不会丢。
+            if let cd = profile.remoteChangeDirectoryCommand {
+                write(Array((cd + "\n").utf8))
+            }
+
             watchClose(signal)
         } catch {
             teardownChannels()

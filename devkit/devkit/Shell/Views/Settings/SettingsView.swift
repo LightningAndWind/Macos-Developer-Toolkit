@@ -2,12 +2,12 @@
 //  SettingsView.swift
 //  devkit
 //
-//  设置面板：集中管理 HTTP 记录与 SSH 连接记录（新增 / 删除），另含数据目录信息。
+//  设置面板：集中管理 HTTP 记录与终端会话记录（新增 / 删除），另含数据目录信息。
 //  入口：侧栏左下角设置按钮、菜单「设置…」(⌘,)。
 //
 //  设计说明：
-//  - 左侧为分区导轨（HTTP 记录 / SSH 连接 / 通用），右侧为对应列表，仿系统设置的观感；
-//  - 「已保存请求 / SSH 连接」为用户资产，删除前弹确认；「历史记录」为过程数据，删除即时生效；
+//  - 左侧为分区导轨（HTTP 记录 / 终端会话 / Git 仓库 / 通用），右侧为对应列表，仿系统设置的观感；
+//  - 「已保存请求 / 终端会话记录」为用户资产，删除前弹确认；「历史记录」为过程数据，删除即时生效；
 //  - 删除会同步刷新已打开标签内缓存的列表 / 绑定，避免出现「设置里删了但标签里还在」。
 //
 
@@ -27,7 +27,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .http: return "HTTP 记录"
-        case .ssh: return "SSH 连接"
+        case .ssh: return "终端会话"
         case .git: return "Git 仓库"
         case .general: return "通用"
         }
@@ -86,7 +86,7 @@ struct SettingsView: View {
     @State private var httpQuery = ""
     @State private var sshQuery = ""
 
-    // 新建 SSH 连接（嵌套 sheet）
+    // 新建 / 编辑终端记录（嵌套 sheet）
     @State private var editingProfile: SSHProfile?
     @State private var editingProfileIsNew = false
 
@@ -111,7 +111,7 @@ struct SettingsView: View {
         .sheet(item: $editingProfile) { profile in
             SSHProfileEditorView(draft: profile, isNew: editingProfileIsNew) { saved, connect in
                 refresh()
-                if connect { connectInNewTab(saved) }
+                if connect { openInNewTab(saved) }
             }
         }
         .confirmationDialog(
@@ -338,36 +338,37 @@ struct SettingsView: View {
     private var sshPane: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                searchField(text: $sshQuery, placeholder: "搜索名称 / 主机 / 用户名")
-                Button { newSSHConnection() } label: {
-                    Label("新建连接", systemImage: "plus")
+                searchField(text: $sshQuery, placeholder: "搜索名称 / 主机 / 用户名 / 目录")
+                Button { newSSHRecord() } label: {
+                    Label("新建记录", systemImage: "plus")
                 }
                 .controlSize(.small)
-                .help("配置一台新主机")
+                .help("新建本地终端记录或远程 SSH 连接")
             }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Text("连接配置").font(.system(size: 12, weight: .semibold))
+                        Text("会话记录").font(.system(size: 12, weight: .semibold))
                         countBadge(filteredProfiles.count)
                         Spacer(minLength: 0)
                     }
 
                     if profiles.isEmpty {
-                        emptyHint("还没有保存的 SSH 连接。点「新建连接」添加。")
+                        emptyHint("还没有保存的终端记录。点「新建记录」添加本地终端或 SSH 连接。")
                     } else if isSearchingSSH {
                         if filteredProfiles.isEmpty {
-                            emptyHint("没有匹配的连接")
+                            emptyHint("没有匹配的记录")
                         } else {
                             ForEach(filteredProfiles) { profile in
                                 SettingsRecordRow(
-                                    symbol: "terminal",
+                                    symbol: profile.isLocal ? "house" : "terminal",
                                     symbolColor: .accentColor,
                                     title: profile.name,
-                                    subtitle: "\(profile.connectSummary) · \(folderName(for: profile))",
-                                    deleteHelp: "删除该连接（含其私钥文件）",
-                                    onDelete: { pendingDeletion = .sshProfile(id: profile.id, name: profile.name) }
+                                    subtitle: "\(profile.displaySummary) · \(folderName(for: profile))",
+                                    deleteHelp: "删除该记录（含其私钥文件）",
+                                    onDelete: { pendingDeletion = .sshProfile(id: profile.id, name: profile.name) },
+                                    onEdit: { beginEditProfile(profile.id) }
                                 )
                             }
                         }
@@ -381,7 +382,9 @@ struct SettingsView: View {
                             onMoveRecord: { node, target in
                                 SSHProfileStore.moveProfile(id: node.id, to: target)
                                 refresh()
-                            }
+                            },
+                            // 终端会话记录可就地编辑（名称 / 默认目录 / 主机 / 认证等）。
+                            onEditRecord: { node in beginEditProfile(node.id) }
                         )
                     }
                 }
@@ -432,7 +435,7 @@ struct SettingsView: View {
                 .controlSize(.small)
             }
 
-            Text("HTTP 记录（已保存请求 / 历史）与 SSH 连接配置均保存在该目录下的 devkit.sqlite3。")
+            Text("HTTP 记录（已保存请求 / 历史）与终端会话记录均保存在该目录下的 devkit.sqlite3。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -528,6 +531,7 @@ struct SettingsView: View {
             $0.name.lowercased().contains(q)
                 || $0.host.lowercased().contains(q)
                 || $0.username.lowercased().contains(q)
+                || ($0.workingDirectory ?? "").lowercased().contains(q)
         }
     }
 
@@ -667,13 +671,13 @@ struct SettingsView: View {
                                         kind: .folder(name: f.name),
                                         children: (node.children ?? []).map(map))
             case .profile(let p):
-                // 层级已由树体现，副标题只留连接摘要（不再重复文件夹名）。
+                // 层级已由树体现，副标题只留摘要（不再重复文件夹名）；本地记录用 house 图标区分。
                 return SettingsTreeNode(id: p.id,
                                         kind: .record(title: p.name,
-                                                      subtitle: p.connectSummary,
+                                                      subtitle: p.displaySummary,
                                                       badge: nil,
                                                       badgeColor: nil,
-                                                      symbol: "terminal",
+                                                      symbol: p.isLocal ? "house" : "terminal",
                                                       symbolColor: .accentColor),
                                         children: nil)
             }
@@ -708,8 +712,18 @@ struct SettingsView: View {
         dismiss()
     }
 
-    /// 新增 SSH 连接 = 打开连接编辑器；保存后列表就地刷新。
-    private func newSSHConnection() {
+    /// 编辑一条已有记录：从库里读回整条 profile（以 blob 为准）后交给编辑器。
+    ///
+    /// 必须 `load(id:)` 而不是拿列表里的值直接用：列表项是渲染用的轻量结构，
+    /// 而编辑器要改的是完整记录（密码 / 私钥 / 默认目录等）。
+    private func beginEditProfile(_ id: UUID) {
+        guard let profile = SSHProfileStore.load(id: id) else { return }
+        editingProfileIsNew = false
+        editingProfile = profile
+    }
+
+    /// 新建记录 = 打开记录编辑器（默认远程 SSH 起草，可切成本地终端）；保存后列表就地刷新。
+    private func newSSHRecord() {
         editingProfileIsNew = true
         editingProfile = SSHProfile(folderID: nil,
                                     name: "",
@@ -719,11 +733,11 @@ struct SettingsView: View {
                                     authKind: .password)
     }
 
-    /// 编辑器里点「保存并连接」：新开 SSH 标签并连上。
-    private func connectInNewTab(_ profile: SSHProfile) {
+    /// 编辑器里点「保存并连接 / 保存并打开」：新开终端标签并打开该记录。
+    private func openInNewTab(_ profile: SSHProfile) {
         DispatchQueue.main.async {
             guard let tab = appState.tabManager.openTool(descriptor: SSHTool.descriptor) else { return }
-            appState.sshTool(forTab: tab.id)?.connect(to: profile)
+            appState.sshTool(forTab: tab.id)?.open(profile)
             appState.tabManager.rename(tabID: tab.id, to: profile.name)
             appState.saveSession()
             dismiss()
@@ -797,7 +811,7 @@ private enum PendingDeletion: Identifiable {
     var title: String {
         switch self {
         case .savedRequest: return "删除这条已保存的请求？"
-        case .sshProfile: return "删除这个 SSH 连接？"
+        case .sshProfile: return "删除这条终端记录？"
         case .gitRepo: return "删除这个仓库登记？"
         case .httpFolder, .sshFolder: return "删除这个文件夹？"
         }
@@ -834,6 +848,8 @@ struct SettingsRecordRow: View {
     var subtitle: String? = nil
     let deleteHelp: String
     let onDelete: () -> Void
+    /// 可选的就地编辑入口；`nil` 时（如 HTTP 记录）不显示铅笔按钮。
+    var onEdit: (() -> Void)? = nil
 
     @State private var isHovering = false
 
@@ -865,6 +881,18 @@ struct SettingsRecordRow: View {
                 }
             }
             Spacer(minLength: 8)
+            if let onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovering ? 1 : 0.5)
+                .help("编辑该记录（名称 / 目录 / 主机等）")
+            }
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .font(.system(size: 11))

@@ -2,9 +2,10 @@
 //  SSHProfileStore.swift
 //  devkit
 //
-//  M4：SSH 集合（多级文件夹 + 连接配置）持久化。复用 DatabaseManager 的
+//  M4：终端会话集合（多级文件夹 + 本地/远程记录）持久化。复用 DatabaseManager 的
 //  ssh_folders / ssh_profiles 两张表；db 未打开时静默降级（与 HTTPCollectionStore 一致）。
 //  profile 整条编入 profile_json blob，标量列为查询/排序冗余，解码以 blob 为准（编解码对称）。
+//  本地终端记录与远程 SSH 记录同表存放（由 profile.kind 区分），本地记录的 host/port 为空/默认值。
 //
 
 import Foundation
@@ -166,26 +167,23 @@ enum SSHProfileStore {
     }
 
     /// 仅改名（供标签标题双向同步）。
+    ///
+    /// 走「整条读改写」而不是只 UPDATE 标量列：`name` 列只是查询冗余，
+    /// 列表 / 树一律以 `profile_json` 为准，只改列会让改名在界面上不生效。
     static func renameProfile(id: UUID, name: String) {
         guard DatabaseManager.shared.isOpen else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        try? DatabaseManager.shared.run(
-            "UPDATE ssh_profiles SET name = ?, updated_at = ? WHERE id = ?;",
-            bind: [.text(trimmed), .real(Date.now.timeIntervalSince1970), .text(id.uuidString)]
-        )
+        guard !trimmed.isEmpty, var profile = load(id: id) else { return }
+        profile.name = trimmed
+        try? save(profile)
     }
 
+    /// 移动到目标文件夹（`folderID == nil` = 根）。同样整条读改写，保证 blob 与冗余列同步。
     static func moveProfile(id: UUID, to folderID: UUID?) {
         guard DatabaseManager.shared.isOpen else { return }
-        try? DatabaseManager.shared.run(
-            "UPDATE ssh_profiles SET folder_id = ?, updated_at = ? WHERE id = ?;",
-            bind: [
-                folderID.map { SQLiteValue.text($0.uuidString) } ?? .null,
-                .real(Date.now.timeIntervalSince1970),
-                .text(id.uuidString),
-            ]
-        )
+        guard var profile = load(id: id) else { return }
+        profile.folderID = folderID
+        try? save(profile)
     }
 
     /// 删除连接：移除记录 + 其私钥文件。

@@ -7,7 +7,8 @@
 //   - 密码认证 → 进程内 NIOSSH（SSHClient），自动登录、不在终端弹密码提示；主机指纹走应用内 TOFU。
 //   - 私钥认证 → 系统 `/usr/bin/ssh` 子进程（RemoteSSHContainer），原生支持 RSA（如 boot.pem）、
 //     rsa-sha2、口令与 known_hosts；主机确认由 ssh 在终端内交互完成。
-//  连接配置（profile）按 HTTP 式多级文件夹集合管理，存 SQLite。新标签进入「选择器」。
+//  会话记录（profile）按 HTTP 式多级文件夹集合管理，存 SQLite；记录分本地 / 远程两类，
+//  各自可配「默认进入的文件夹」。新标签进入「选择器」。
 //
 
 import SwiftUI
@@ -19,7 +20,7 @@ final class SSHTool: DevkitTool {
         title: "SSH 终端",
         symbolName: "terminal",
         category: .terminal,
-        subtitle: "本地终端与 SSH 会话，连接配置按文件夹归类管理。",
+        subtitle: "本地终端与 SSH 会话，会话记录按文件夹归类管理。",
         allowsMultipleInstances: true,
         supportsWindowDetach: true
     )
@@ -30,8 +31,15 @@ final class SSHTool: DevkitTool {
 
     /// nil = 尚未选择会话类型（新标签未通过选择器）。
     private(set) var sessionKind: SSHSessionKind?
-    /// 远程会话当前使用的连接配置。
+    /// 当前会话来源的记录：本地记录或远程记录；nil = 临时会话（如直接点「本地终端」）。
     private(set) var activeProfile: SSHProfile?
+
+    // —— 本地终端 ——
+
+    /// 本地 shell 的工作目录（来自记录）；nil → 个人目录。
+    private(set) var localWorkingDirectory: String?
+    /// 本地会话身份：每次（重）开换一个 UUID，视图据此 `.id()` 重建容器 → 以新目录重启 shell。
+    private(set) var localLaunchID = UUID()
 
     // —— 密码认证引擎：进程内 NIOSSH ——
 
@@ -63,7 +71,9 @@ final class SSHTool: DevkitTool {
 
     var dynamicTabTitle: String? {
         switch sessionKind {
-        case .local: return "本地终端"
+        case .local:
+            if let name = activeProfile?.name, !name.isEmpty { return name }
+            return "本地终端"
         case .remote: return activeProfile?.host
         case nil: return nil
         }
@@ -85,12 +95,24 @@ final class SSHTool: DevkitTool {
 
     // MARK: - 会话动作
 
-    /// 选择「本地」：进入本地 shell。
-    func startLocal() {
+    /// 选择「本地」：进入本地 shell。可指定工作目录，也可带上来源记录（从本地记录打开时）。
+    func startLocal(workingDirectory: String? = nil, record: SSHProfile? = nil) {
         sessionKind = .local
-        activeProfile = nil
+        activeProfile = record
+        localWorkingDirectory = workingDirectory ?? record?.normalizedWorkingDirectory
+        // 换身份 → 视图重建本地容器，shell 在新目录里启动。
+        localLaunchID = UUID()
         remoteRunning = false
         client.disconnect()
+    }
+
+    /// 打开一条记录：本地终端记录 → 本地 shell（落在其默认目录）；远程记录 → 发起 SSH 连接。
+    func open(_ profile: SSHProfile) {
+        if profile.isLocal {
+            startLocal(workingDirectory: profile.normalizedWorkingDirectory, record: profile)
+        } else {
+            connect(to: profile)
+        }
     }
 
     /// 选择/新建远程：按认证方式选引擎并发起连接。
@@ -127,6 +149,7 @@ final class SSHTool: DevkitTool {
         client.disconnect()
         sessionKind = nil
         activeProfile = nil
+        localWorkingDirectory = nil
     }
 
     /// 标签关闭：放行挂起的信任询问并结束会话（外部 ssh 容器随之 dismantle → terminate 杀进程）。
@@ -163,13 +186,20 @@ final class SSHTool: DevkitTool {
         return try? JSONEncoder().encode(state)
     }
 
-    /// 从快照恢复：本地直接回本地终端；远程仅回填配置并置为「已断开」，
+    /// 从快照恢复：本地直接回本地终端（有记录则连同其目录）；远程仅回填配置并置为「已断开」，
     /// 由横幅展示「重新连接」交给用户点击（不自动联网，避免 surprise）。
     @MainActor func restoreSessionState(_ data: Data) {
         guard let state = try? JSONDecoder().decode(SessionState.self, from: data) else { return }
         switch state.sessionKind {
         case .local:
             sessionKind = .local
+            if let id = state.profileID, let profile = SSHProfileStore.load(id: id), profile.isLocal {
+                activeProfile = profile
+                localWorkingDirectory = profile.normalizedWorkingDirectory
+            } else {
+                activeProfile = nil
+                localWorkingDirectory = nil
+            }
         case .remote:
             if let id = state.profileID, let profile = SSHProfileStore.load(id: id) {
                 sessionKind = .remote

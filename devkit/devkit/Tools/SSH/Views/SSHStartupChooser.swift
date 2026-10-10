@@ -3,9 +3,9 @@
 //  devkit
 //
 //  M4：打开新 SSH 标签（或"换个目标"）时的选择弹窗，交互对齐 HTTPStartupChooser：
-//  ① 本地终端：直接进入本机 shell；
-//  ② 新建 SSH 连接：弹出编辑器（嵌套 sheet），保存后可直接连接；
-//  ③ 打开已保存：浏览多级文件夹 + 已有连接，点连接即连接；底部可新建文件夹。
+//  ① 本地终端：直接进入本机 shell（临时会话，不落库）；
+//  ② 新建记录：弹出编辑器（嵌套 sheet），可建本地终端记录或远程 SSH 连接，保存后可直接打开；
+//  ③ 打开已保存：浏览多级文件夹 + 已有记录，点记录即打开/连接；底部可新建文件夹。
 //
 
 import SwiftUI
@@ -31,7 +31,7 @@ struct SSHStartupChooser: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("SSH 连接")
+                Text("终端会话")
                     .font(.headline)
                 Spacer()
                 Button(action: closeAndMaybeDropTab) {
@@ -46,13 +46,13 @@ struct SSHStartupChooser: View {
                 .help("关闭")
             }
 
-            // 块①：本地 + 新建
+            // 块①：本地 + 新建记录
             HStack(spacing: 10) {
-                primaryCard(icon: "house", title: "本地终端", subtitle: "本机 shell") {
+                primaryCard(icon: "house", title: "本地终端", subtitle: "本机 shell · 个人目录") {
                     appState.sshTool(forTab: tabID)?.startLocal()
                     onDismiss()
                 }
-                primaryCard(icon: "plus.square.on.square", title: "新建 SSH 连接", subtitle: "配置一台新主机") {
+                primaryCard(icon: "plus.square.on.square", title: "新建记录", subtitle: "本地目录或 SSH 主机") {
                     beginNew()
                 }
             }
@@ -60,7 +60,7 @@ struct SSHStartupChooser: View {
             // 块②：打开已保存
             VStack(alignment: .leading, spacing: 8) {
                 Text("打开已保存").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Text("点击连接 = 连接该主机；点击文件夹 = 选为新建文件夹的位置；右键可编辑/删除")
+                Text("点击记录 = 打开本地终端 / 连接该主机；点击文件夹 = 选为新建文件夹的位置；右键可编辑/删除")
                     .font(.caption).foregroundStyle(.secondary)
                 browser
                     .frame(height: 220)
@@ -90,7 +90,7 @@ struct SSHStartupChooser: View {
             Button("取消", role: .cancel) { renamingFolder = nil }
             Button("确定") { commitRenameFolder() }
         }
-        .confirmationDialog("删除文件夹及其中的所有连接？",
+        .confirmationDialog("删除文件夹及其中的所有记录？",
                             isPresented: Binding(get: { folderToDelete != nil },
                                                  set: { if !$0 { folderToDelete = nil } }),
                             titleVisibility: .visible) {
@@ -134,6 +134,7 @@ struct SSHStartupChooser: View {
         nodes = SSHProfileStore.buildTree()
     }
 
+    /// 新建记录：默认按远程 SSH 起草，编辑器里可切成「本地终端」。
     private func beginNew() {
         editingIsNew = true
         editing = SSHProfile(folderID: targetFolder, name: "", host: "", port: SSHProfile.defaultPort,
@@ -150,9 +151,10 @@ struct SSHStartupChooser: View {
         refresh()
     }
 
+    /// 打开一条记录：本地记录进本地 shell（落在其默认目录），远程记录发起 SSH 连接。
     private func open(_ profile: SSHProfile) {
         guard let tool = appState.sshTool(forTab: tabID) else { onDismiss(); return }
-        tool.connect(to: profile)
+        tool.open(profile)
         appState.tabManager.rename(tabID: tabID, to: profile.name)
         onDismiss()
     }

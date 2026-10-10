@@ -49,6 +49,8 @@ struct RemoteSSHContainer: NSViewRepresentable {
 
     /// 依据 profile 组装 ssh 命令行参数。
     /// 私钥认证：`-i <数据目录内绝对路径>`；端口非默认时 `-p`；目标 `user@host`。
+    /// 记录里配了「默认进入的文件夹」时，追加远程命令 `cd <目录>; exec $SHELL -l`：
+    /// 不加这段的话，`ssh host "cmd"` 会在命令结束后直接退出；`-t` 强制分配 pty 保证可交互。
     /// 口令 / 密码 / 首次主机指纹确认都由 ssh 在终端内交互提示，无需在此处理。
     private static func sshInvocation(for profile: SSHProfile) -> (String, [String]) {
         var args: [String] = []
@@ -56,7 +58,13 @@ struct RemoteSSHContainer: NSViewRepresentable {
            let keyURL = SSHKeyStorage.resolvedURL(fileName: fileName) {
             args += ["-i", keyURL.path]
         }
-        args += ["-p", String(profile.port), "\(profile.username)@\(profile.host)"]
+        args += ["-p", String(profile.port)]
+        let target = "\(profile.username)@\(profile.host)"
+        if let remoteCommand = profile.sshRemoteCommand {
+            args += ["-t", target, remoteCommand]
+        } else {
+            args += [target]
+        }
         return ("/usr/bin/ssh", args)
     }
 
