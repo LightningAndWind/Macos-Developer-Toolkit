@@ -45,6 +45,7 @@ enum DebugSelfCheck {
         checkSnapshotInheritsTruncation()
         checkSnapshotDecodesLegacyJSON()
         checkSSHRecordCompatibility()
+        await checkCommitClosesFilePreview()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
@@ -340,9 +341,75 @@ enum DebugSelfCheck {
         expect(SSHProfileStore.load(id: local.id) == nil, "删除文件夹应级联删除其中的本地记录")
     }
 
+    /// 提交后预览面板必须**关闭**，而不是留在原地显示「文件已不在变更列表」。
+    ///
+    /// 这类路径的失效方式很隐蔽：提交成功后文件从变更列表消失，预览面板却还在，
+    /// 只在面板里显示一句「文件已不在变更列表」—— 不报错、不崩溃，用户只会觉得「怪怪的」。
+    /// 这里用真实临时仓库跑一遍完整链路：选中文件 → 提交 → 断言预览已关且内容已清空。
+    /// 会写临时目录与临时仓库，仓库在结束时删除。
+    private static func checkCommitClosesFilePreview() async {
+        guard let dir = makeScratchRepo() else {
+            expect(false, "应能创建自检用的临时 Git 仓库")
+            return
+        }
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+
+        let tool = GitTool()
+        tool.select(repo: GitRepo(folderID: nil, alias: "自检仓库", path: dir, keyID: nil))
+        await tool.refreshAll()
+
+        // 先证夹具有效：改动过的 a.txt 应出现在变更列表里，否则后面的断言是空转。
+        guard let entry = tool.status.entries.first(where: { $0.path == "a.txt" }) else {
+            expect(false, "夹具应有一个已修改的 a.txt（实际条目：\(tool.status.entries.map(\.path))）")
+            return
+        }
+        await tool.selectFileForDiff(entry)
+        expect(tool.selectedFilePath == "a.txt", "选中文件后预览应打开")
+
+        await tool.commit(message: "自检提交", amend: false)
+        expect(!tool.status.entries.contains { $0.path == "a.txt" },
+               "提交后该文件不应再出现在变更列表（实际条目：\(tool.status.entries.map(\.path))，提交报错：\(tool.errorMessage ?? "无")）")
+        expect(tool.selectedFilePath == nil,
+               "提交后预览应关闭（实际仍为 \(tool.selectedFilePath ?? "nil")）—— 留在原地会显示「文件已不在变更列表」")
+        expect(tool.fileDiff == nil, "提交后预览内容应一并清空")
+    }
+
+    /// 建一个临时仓库：`a.txt` 已提交后又改动（即变更列表里有一条修改记录）。
+    private static func makeScratchRepo() -> String? {
+        let dir = NSTemporaryDirectory() + "devkit-selfcheck-git-\(UUID().uuidString)"
+        guard (try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)) != nil
+        else { return nil }
+
+        func git(_ args: [String]) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = args
+            process.currentDirectoryURL = URL(fileURLWithPath: dir)
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try? process.run()
+            process.waitUntilExit()
+        }
+
+        try? "one\n".write(toFile: dir + "/a.txt", atomically: true, encoding: .utf8)
+        git(["init", "-q"])
+        // 提交者身份写进**仓库**配置：应用侧走的是不带 -c 的 `git commit`，
+        // 依赖机器上有全局 user.name/user.email；自检不能假定这一点。
+        git(["config", "user.email", "selfcheck@local"])
+        git(["config", "user.name", "selfcheck"])
+        git(["add", "a.txt"])
+        git(["commit", "-q", "-m", "init"])
+        // 再改一次并**暂存**：这正是用户能点「提交」的前提（未暂存时提交按钮是禁用的），
+        // 提交成功后该条目应从变更列表消失。
+        try? "two\n".write(toFile: dir + "/a.txt", atomically: true, encoding: .utf8)
+        git(["add", "a.txt"])
+        return dir
+    }
+
     /// 自检夹具服务器的基地址（`DEVKIT_SELFCHECK_HTTP_BASE`）。
     ///
     /// 需要真实网络行为才能验证的检查项都用它；未配置时各项自行打印 SKIP，
+    /// 不影响退出码 —— 这样自检在没有夹具的环境里也能跑完其余部分。
     /// 不影响退出码 —— 这样自检在没有夹具的环境里也能跑完其余部分。
     private static var fixtureBase: String? {
         guard let base = ProcessInfo.processInfo.environment["DEVKIT_SELFCHECK_HTTP_BASE"],

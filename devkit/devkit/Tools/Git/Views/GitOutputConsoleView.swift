@@ -31,9 +31,9 @@ struct GitOutputConsoleView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(tool.consoleLines.enumerated()), id: \.offset) { idx, line in
-                            Text(line)
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(tool.consoleLines.indices, id: \.self) { idx in
+                            Text(tool.consoleLines[idx])
                                 .font(.system(size: 11, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .id(idx)

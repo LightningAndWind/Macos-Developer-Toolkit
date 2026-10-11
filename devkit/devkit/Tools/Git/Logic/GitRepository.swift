@@ -49,8 +49,9 @@ struct GitRepository {
 
     /// 工作区状态（分支 / ahead-behind / 变更条目 / 是否变基中）。
     func status() async throws -> GitStatus {
-        let out = try await run(["status", "--porcelain=v1", "-b", "--untracked-files=all"])
-        return Self.parseStatus(out.stdout, rebasing: Self.detectRebasing(at: path))
+        // `normal` 将未跟踪目录折叠为目录项，避免一次把深层目录中的每个文件都展开、传回并渲染。
+        let out = try await run(["status", "--porcelain=v1", "-b", "--untracked-files=normal"])
+        return await Self.parseStatus(out.stdout, rebasing: Self.detectRebasing(at: path))
     }
 
     static func detectRebasing(at path: String) -> Bool {
@@ -61,7 +62,8 @@ struct GitRepository {
     }
 
     /// 解析 `status --porcelain=v1 -b` 文本。
-    static func parseStatus(_ text: String, rebasing: Bool) -> GitStatus {
+    @concurrent
+    static func parseStatus(_ text: String, rebasing: Bool) async -> GitStatus {
         var branch = "—"
         var upstream: String?
         var ahead = 0, behind = 0
@@ -95,7 +97,7 @@ struct GitRepository {
                          entries: entries, isRebasing: rebasing)
     }
 
-    private static func extractInt(from s: String, key: String) -> String? {
+    nonisolated private static func extractInt(from s: String, key: String) -> String? {
         guard let r = s.range(of: "\(key) ") else { return nil }
         let tail = s[r.upperBound...]
         let num = tail.prefix(while: { $0.isNumber })
@@ -192,6 +194,10 @@ struct GitRepository {
     func fileDiff(entry: GitFileEntry) async -> GitFileDiff {
         if entry.untracked {
             let abs = URL(fileURLWithPath: path).appendingPathComponent(entry.path).path
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: abs, isDirectory: &isDirectory), isDirectory.boolValue {
+                return await untrackedDirectoryListing(dir: entry.path)
+            }
             let out = try? await GitRunner.git(
                 ["-c", "core.quotepath=false", "diff", "--no-index", "--unified=3", "--no-color", "/dev/null", abs],
                 at: path, environment: environment)
@@ -215,6 +221,28 @@ struct GitRepository {
         return .unavailable("没有可显示的差异（可能是二进制文件或内容未变化）")
     }
 
+    /// 未跟踪目录的预览：列出目录内未被忽略的文件（`git ls-files --others`，同样尊重 .gitignore），
+    /// 拼成「全部新增」的清单。目录本身不可 diff（`--no-index` 对目录会报错），故走此路径。
+    func untrackedDirectoryListing(dir: String) async -> GitFileDiff {
+        let out = try? await run(["ls-files", "--others", "--exclude-standard", "-z", "--", dir])
+        var files = (out?.stdout ?? "").split(separator: "\0").map(String.init).filter { !$0.isEmpty }
+        guard !files.isEmpty else { return .unavailable("目录内没有可预览的未跟踪文件") }
+        let total = files.count
+        var lines: [GitDiffLine] = []
+        // 目录内文件过多时只列前 N 个，避免又造出一份超长清单（本次优化的初衷）。
+        let limit = 500
+        if files.count > limit { files = Array(files.prefix(limit)) }
+        for (i, file) in files.enumerated() {
+            lines.append(GitDiffLine(id: i, kind: .added, text: file, oldLine: nil, newLine: i + 1))
+        }
+        if total > limit {
+            lines.append(GitDiffLine(id: lines.count, kind: .meta,
+                                     text: "… 共 \(total) 个未跟踪文件，仅列出前 \(limit) 个",
+                                     oldLine: nil, newLine: nil))
+        }
+        return .unified(oldPath: "/dev/null", newPath: dir, lines: lines)
+    }
+
     /// 把文件内容拼成「全部新增」的虚拟 diff（无 HEAD 可比时的预览）。
     static func virtualNewFile(path: String, text: String) -> GitFileDiff {
         let lines = text.components(separatedBy: "\n")
@@ -231,10 +259,10 @@ struct GitRepository {
 
     /// 解析 `git diff` 文本为行列表；无 `diff --git` 头时返回 nil（调用方走占位分支）。
     static func parseUnifiedDiff(_ text: String, fallbackPath: String) -> GitFileDiff? {
-        var lines = text.components(separatedBy: "\n")
-        // 去掉末尾换行拆出的空尾行。
-        if lines.last?.isEmpty == true { lines.removeLast() }
-        guard let headerIdx = lines.firstIndex(where: { $0.hasPrefix("diff --git ") }) else { return nil }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        // 保留 Substring 视图，避免 components 为每个输出行再复制一份 String。
+        let endIndex = lines.last?.isEmpty == true ? lines.count - 1 : lines.count
+        guard let headerIdx = lines[..<endIndex].firstIndex(where: { $0.hasPrefix("diff --git ") }) else { return nil }
         var oldPath = fallbackPath
         var newPath = fallbackPath
         if let b = lines[headerIdx].range(of: " b/"), lines[headerIdx].hasPrefix("diff --git ") {
@@ -256,7 +284,7 @@ struct GitRepository {
             result.append(GitDiffLine(id: id, kind: kind, text: body, oldLine: o, newLine: w))
         }
         var idx = headerIdx
-        while idx < lines.count {
+        while idx < endIndex {
             let line = lines[idx]
             idx += 1
             if line.hasPrefix("@@") {
@@ -272,7 +300,7 @@ struct GitRepository {
                     oldLine = startOf(parts[0])
                     newLine = startOf(parts[1])
                 }
-                emit(.hunkHeader, line)
+                emit(.hunkHeader, String(line))
             } else if line.hasPrefix("index ") || line.hasPrefix("--- ") || line.hasPrefix("+++ ")
                         || line.hasPrefix("new file") || line.hasPrefix("deleted file")
                         || line.hasPrefix("similarity") || line.hasPrefix("rename ") {
@@ -289,7 +317,7 @@ struct GitRepository {
             } else if line.hasPrefix("\\") {
                 continue // "\ No newline at end of file"
             } else {
-                emit(.context, line.hasPrefix(" ") ? String(line.dropFirst()) : line)
+                emit(.context, line.hasPrefix(" ") ? String(line.dropFirst()) : String(line))
             }
         }
         return .unified(oldPath: oldPath, newPath: newPath, lines: result)

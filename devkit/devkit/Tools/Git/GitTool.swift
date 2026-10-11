@@ -96,7 +96,10 @@ final class GitTool: DevkitTool {
         diffLoadToken = token
         isDiffLoading = true
         defer { if diffLoadToken == token { isDiffLoading = false } }
-        fileDiff = await git.fileDiff(entry: entry)
+        let diff = await git.fileDiff(entry: entry)
+        // 快速连点文件时，旧加载的结果不得覆盖新选中文件的预览。
+        guard diffLoadToken == token else { return }
+        fileDiff = diff
         if entry.conflicted {
             let parsed = try? await git.conflictBlocks(file: entry.path)
             guard diffLoadToken == token else { return }
@@ -167,6 +170,7 @@ final class GitTool: DevkitTool {
         selectedRepo = repo
         section = .changes
         errorMessage = nil
+        clearFileSelection()   // 换仓库时不保留上一个仓库的预览
         Task { await refreshAll() }
     }
 
@@ -175,6 +179,7 @@ final class GitTool: DevkitTool {
         selectedRepo = nil
         status = .empty
         commits = []
+        clearFileSelection()
     }
 
     /// 改当前仓库绑定的密钥（`nil` = 不绑定）：立即回写集合并刷新远程环境。
@@ -201,6 +206,7 @@ final class GitTool: DevkitTool {
         isBusy = true
         defer { isBusy = false }
         if let s = try? await git.status() { status = s }
+        closePreviewIfEntryGone()
         if let b = try? await git.branches() {
             localBranches = b.local
             remoteBranches = b.remote
@@ -213,7 +219,18 @@ final class GitTool: DevkitTool {
     /// 仅刷新状态（提交/暂存后调用，成本低）。
     func refreshStatus() async {
         guard let git = repository() else { return }
-        if let s = try? await git.status() { status = s }
+        if let s = try? await git.status() {
+            status = s
+            closePreviewIfEntryGone()
+        }
+    }
+
+    /// 刷新后若当前预览的文件已不在变更列表（如已提交、已丢弃、已随分支切换消失），
+    /// 关闭预览面板 —— 而不是留在原地显示「文件已不在变更列表」。
+    private func closePreviewIfEntryGone() {
+        guard let path = selectedFilePath else { return }
+        guard !status.entries.contains(where: { $0.path == path }) else { return }
+        clearFileSelection()
     }
 
     func loadLog(reset: Bool, git: GitRepository? = nil) async {

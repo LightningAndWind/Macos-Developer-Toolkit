@@ -4,6 +4,7 @@
 //
 //  克隆仓库：填 URL + 选目标父目录 + 别名 + 绑定密钥。用选定密钥注入 GIT_SSH_COMMAND 执行
 //  `git clone`，实时输出到控制台；成功后自动登记为仓库（folderID 落在选择器当前目标文件夹）。
+//  磁盘目录名固定取仓库原本名称（由 URL 推导），别名只写入数据库作为展示名，不改动文件夹。
 //
 
 import AppKit
@@ -33,7 +34,7 @@ struct GitCloneSheet: View {
                     TextField("目标目录", text: $destination).disabled(true).lineLimit(1)
                     Button("选择…") { pickDestination() }
                 }
-                TextField("别名（留空取仓库名）", text: $alias)
+                TextField("别名（仅显示名，留空取仓库名）", text: $alias)
                 Picker("绑定密钥", selection: Binding(
                     get: { keyID }, set: { keyID = $0 }
                 )) {
@@ -103,16 +104,16 @@ struct GitCloneSheet: View {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         let env = GitSSHBridge.environment(keyID: keyID)
         let parent = destination
-        // 子目录名：别名清洗 or 从 URL 推导。
-        var sub = alias.trimmingCharacters(in: .whitespaces)
-        if sub.isEmpty { sub = GitRepository.repoName(from: trimmedURL) }
-        let chosenAlias = sub
+        // 磁盘目录名固定取仓库原本名称（由 URL 推导），别名只入库作为展示名，不改文件夹名。
+        let directoryName = GitRepository.repoName(from: trimmedURL)
+        let enteredAlias = alias.trimmingCharacters(in: .whitespaces)
+        let chosenAlias = enteredAlias.isEmpty ? directoryName : enteredAlias
 
         Task {
             do {
                 let path = try await GitRepository.clone(url: trimmedURL,
                                                          into: parent,
-                                                         subdirectory: sub,
+                                                         subdirectory: directoryName,
                                                          environment: env,
                                                          onLine: { lines.append($0) })
                 let repo = GitRepo(folderID: targetFolder, alias: chosenAlias, path: path, keyID: keyID)

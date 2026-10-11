@@ -41,7 +41,7 @@ struct GitChangesSection: View {
 
             HStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 12) {
                         if !tool.status.conflicted.isEmpty {
                             fileGroup("冲突", color: .red) {
                                 ForEach(tool.status.conflicted) { fileRow($0, kind: .conflict) }
@@ -131,7 +131,7 @@ struct GitChangesSection: View {
         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        LazyVStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(title).font(.caption.weight(.semibold)).foregroundStyle(color)
                 if let count, count > 0 { Text("\(count)").font(.caption2).foregroundStyle(.secondary) }
