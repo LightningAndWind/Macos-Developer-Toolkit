@@ -17,6 +17,9 @@ struct HTTPToolView: View {
     /// 使窗口缩放时两区按同比例分配，不会出现某一区被完全挤没。
     @State private var editorRatio: CGFloat = 0.5
 
+    /// 超时设置气泡。
+    @State private var showsTimeoutPopover = false
+
     var body: some View {
         VStack(spacing: 0) {
             requestBar
@@ -72,7 +75,7 @@ struct HTTPToolView: View {
                     .textFieldStyle(.plain)
                     .font(.body.monospaced())
                     .focused($urlFocused)
-                    .onSubmit { Task { await tool.send() } }
+                    .onSubmit { tool.send() }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -85,7 +88,13 @@ struct HTTPToolView: View {
                     )
             )
 
-            sendButton
+            timeoutChip
+
+            if tool.isLoading {
+                stopButton
+            } else {
+                sendButton
+            }
 
             Menu {
                 Button {
@@ -119,22 +128,117 @@ struct HTTPToolView: View {
     private var sendButton: some View {
         Button {
             urlFocused = false
-            Task { await tool.send() }
+            tool.send()
         } label: {
             HStack(spacing: 5) {
-                if tool.isLoading {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "paperplane.fill")
-                }
-                Text(tool.isLoading ? "发送中" : "发送")
+                Image(systemName: "paperplane.fill")
+                Text("发送")
             }
             .frame(minWidth: 72)
         }
         .keyboardShortcut(.return, modifiers: .command)
         .buttonStyle(.borderedProminent)
-        .disabled(tool.request.isEmpty || tool.isLoading)
+        .disabled(tool.request.isEmpty)
         .pointingHandOnHover()
+    }
+
+    /// 发送中顶掉发送按钮。
+    ///
+    /// 超时上限放开到 1 小时后，没有它用户就只能干等：请求在途时连关标签都得等它自己超时。
+    /// 与发送按钮同为 `minWidth: 72`，互换时不会让请求栏跳动。
+    private var stopButton: some View {
+        Button {
+            tool.cancelSend()
+        } label: {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.small)
+                Text("停止")
+            }
+            .frame(minWidth: 72)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.red)
+        .pointingHandOnHover()
+        .help("中断在途请求")
+    }
+
+    // MARK: - 超时
+
+    /// 超时档位控件。放在请求栏而不是编辑器分区里 —— 它和「发送」属于同一件事的上下文，
+    /// 要调的时候人正好盯着这一行，不必先切分区。
+    private var timeoutChip: some View {
+        Button {
+            showsTimeoutPopover = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                Text(HTTPDisplay.timeoutLabel(tool.request.timeoutSeconds))
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.10))
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .pointingHandOnHover()
+        .help("请求超时（空闲超时）：等待下一段响应数据的最长时间")
+        .popover(isPresented: $showsTimeoutPopover, arrowEdge: .bottom) {
+            timeoutPopover
+        }
+    }
+
+    private var timeoutPopover: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HTTPSection(title: "常用档位") {
+                HStack(spacing: 6) {
+                    ForEach(HTTPRequestModel.timeoutPresets, id: \.self) { seconds in
+                        if tool.request.timeoutSeconds == seconds {
+                            Button(HTTPDisplay.timeoutLabel(seconds)) { tool.request.timeoutSeconds = seconds }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                        } else {
+                            Button(HTTPDisplay.timeoutLabel(seconds)) { tool.request.timeoutSeconds = seconds }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+
+            HTTPSection(title: "自定义") {
+                HStack(spacing: 6) {
+                    TextField("", value: $tool.request.timeoutSeconds, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 72)
+                    Text("秒")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Stepper("",
+                            value: $tool.request.timeoutSeconds,
+                            in: HTTPRequestModel.minTimeoutSeconds...HTTPRequestModel.maxTimeoutSeconds)
+                        .labelsHidden()
+                }
+            }
+
+            Divider()
+
+            Text("**空闲超时**，不是总时长：每收到一段响应数据就重新计时。流式（SSE）接口只要相邻两块间隔不超过该值就不会触发；非流式接口必须能等完整个生成过程 —— 长耗时 LLM 生成建议设 120 秒以上。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 300)
+        }
+        .padding(14)
     }
 
     private func copyCURL() {

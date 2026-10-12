@@ -12,11 +12,13 @@
 //  用法：`DEVKIT_DATA_DIR=/tmp/x DEVKIT_SELFCHECK=1 <app>/Contents/MacOS/devkit`
 //  全部通过退出码 0，否则 1（方便接进脚本）。**会写库**，请指向临时数据目录。
 //
-//  响应体封顶、响应缓存那几项需要一个本地夹具服务器，用 `DEVKIT_SELFCHECK_HTTP_BASE` 指定
+//  响应体封顶、响应缓存、停止在途请求那几项需要一个本地夹具服务器，用 `DEVKIT_SELFCHECK_HTTP_BASE` 指定
 //  （例如 `http://127.0.0.1:8123`），需提供：
 //    /small.json  小响应，验证完整保留
 //    /big.txt     `Content-Length` 必须大于 `HTTPClient.maxBodyBytes`，验证封顶
+//    /big-chunked 同上但走 `Transfer-Encoding: chunked`（无 Content-Length），验证分块路径
 //    /counter     每次返回自增数字 + `Cache-Control: max-age=600`，验证绕开缓存
+//    /slow        延迟 ≥ 5 秒才响应，验证「停止」能中断等待首字节的请求
 //  未设置该变量时这几项打印 SKIP 并跳过，不影响退出码。
 //
 
@@ -44,11 +46,13 @@ enum DebugSelfCheck {
         checkFolderCascadeDeletes()
         checkSnapshotInheritsTruncation()
         checkSnapshotDecodesLegacyJSON()
+        checkRequestTimeoutCompatibility()
         checkSSHRecordCompatibility()
         await checkCommitClosesFilePreview()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
+        await checkRequestCancel()
         await checkLocalTerminalDismantleKillsShell()
         checkRestoreTearsDownExistingTabs()   // 会清空标签，必须放最后
 
@@ -271,6 +275,47 @@ enum DebugSelfCheck {
                "新格式快照应原样读出 isBodyTruncated=true")
         expect((try? JSONDecoder().decode(HTTPResponseSnapshot.self, from: Data(newFalse.utf8)))?.isBodyTruncated == false,
                "新格式快照应原样读出 isBodyTruncated=false")
+    }
+
+    /// 旧版本写入的请求 JSON 必须能解码。
+    ///
+    /// `timeoutSeconds` 是后加的**非可选**字段：旧版本写的 `request_json`（已保存请求）与历史请求
+    /// blob 里都没有这个键。若交给合成解码，旧 JSON 会抛 `keyNotFound`，而
+    /// `HTTPCollectionStore.allRequests()` 与历史读取都是 `try?` 吞错 ——
+    /// 表现为**升级后已保存的请求整片静默消失**（库里还在、不崩溃、无报错）。
+    ///
+    /// 这里直接构造一段旧格式 JSON（无 `timeoutSeconds` 键）解码到当前类型：必须成功且回退默认值。
+    /// 另附越界值的收口断言 —— 文本框允许自由输入，`0` 若被原样交给 URLSession 就是「立即超时」，
+    /// 现象却是「网络请求失败」，完全看不出是自己填的超时。
+    private static func checkRequestTimeoutCompatibility() {
+        let legacyJSON = #"{"method":"POST","urlString":"https://legacy.local/api","params":[],"headers":[],"body":{"kind":"无","text":"","formFields":[]},"auth":{"kind":"无","token":"","username":"","password":""}}"#
+        do {
+            let request = try JSONDecoder().decode(HTTPRequestModel.self, from: Data(legacyJSON.utf8))
+            expect(request.timeoutSeconds == HTTPRequestModel.defaultTimeoutSeconds,
+                   "旧格式请求（无 timeoutSeconds 键）解码后应回退为默认 \(HTTPRequestModel.defaultTimeoutSeconds) 秒")
+            expect(request.method == "POST" && request.urlString == "https://legacy.local/api",
+                   "旧格式请求解码后其余字段应保持原值")
+        } catch {
+            expect(false, "旧格式请求应能解码（实际失败：\(error.localizedDescription)）—— 否则升级后旧集合与历史会整片静默消失")
+        }
+
+        // 新格式应原样往返。
+        var fresh = HTTPRequestModel(method: "GET", urlString: "https://new.local/api")
+        fresh.timeoutSeconds = 120
+        if let encoded = try? JSONEncoder().encode(fresh),
+           let roundTrip = try? JSONDecoder().decode(HTTPRequestModel.self, from: encoded) {
+            expect(roundTrip.timeoutSeconds == 120, "新格式请求应原样读出 timeoutSeconds=120")
+        } else {
+            expect(false, "新格式请求应能编码后原样解码")
+        }
+
+        var outOfRange = HTTPRequestModel()
+        outOfRange.timeoutSeconds = 0
+        expect(outOfRange.effectiveTimeout == TimeInterval(HTTPRequestModel.minTimeoutSeconds),
+               "超时下界应收口到 \(HTTPRequestModel.minTimeoutSeconds) 秒（0 不能被当成「立即超时」）")
+        outOfRange.timeoutSeconds = 99_999
+        expect(outOfRange.effectiveTimeout == TimeInterval(HTTPRequestModel.maxTimeoutSeconds),
+               "超时上界应收口到 \(HTTPRequestModel.maxTimeoutSeconds) 秒")
     }
 
     /// SSH 会话记录：后补字段（`kind` / `workingDirectory`）的兼容性，以及「本地记录 + 默认目录」的落库与归类。
@@ -527,6 +572,52 @@ enum DebugSelfCheck {
         } catch {
             expect(false, "计数端点请求不应失败：\(error.localizedDescription)")
         }
+    }
+
+    /// 「停止」必须真的能中断在途请求。
+    ///
+    /// 这是放开超时上限（最长 1 小时）后新引入的能力，也属于最容易「看起来能用、其实没用」的一类：
+    /// 按钮点了、界面也回到空闲态，但底层请求仍在跑 —— 用户以为停了，连接却还挂着。
+    ///
+    /// 要害在于**「等服务端第一个字节」这段等待也必须可取消**：接收循环里的
+    /// `Task.checkCancellation()` 只在有数据流动时才被轮到，而长耗时接口恰恰是长时间一声不响。
+    /// 所以夹具用 5 秒不响应的 `/slow`，客户端 0.3 秒时取消，必须**显著早于** 5 秒就结束 ——
+    /// 若断言写成「10 秒内结束」，取消完全没生效也会通过（等服务器自己响应即可），等于没验。
+    private static func checkRequestCancel() async {
+        guard let base = fixtureBase else {
+            print("[selfcheck] SKIP  停止在途请求（未设置 DEVKIT_SELFCHECK_HTTP_BASE）")
+            return
+        }
+
+        let tool = HTTPTool()
+        tool.request = HTTPRequestModel(method: "GET", urlString: "\(base)/slow")
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        tool.send()
+        expect(tool.isLoading, "send() 应同步进入加载态（否则发送按钮存在可连点的空窗）")
+
+        // 先等请求真的发出去再取消，否则测的是「取消一个还没开始的请求」。
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        expect(tool.isLoading, "0.3 秒时请求应仍在途（夹具 /slow 需延迟 ≥ 5 秒才响应）")
+
+        tool.cancelSend()
+        var waitedTicks = 0
+        while tool.isLoading, waitedTicks < 200 {          // 上限 10 秒，避免夹具异常时挂死
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            waitedTicks += 1
+        }
+
+        let elapsed = start.duration(to: .now)
+        let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+        let pretty = String(format: "%.2f", seconds)
+
+        expect(!tool.isLoading, "停止后应能收敛（实际仍未结束）—— 取消没有传到 URLSession")
+        expect(seconds < 3,
+               "停止应显著早于夹具的 5 秒响应（实际 \(pretty) 秒）—— 否则取消没生效，只是等到了响应")
+        expect(tool.lastRequestCancelled, "停止后应进入「已取消」状态（实际未置位）")
+        expect(tool.errorMessage == nil, "主动停止不应走错误通道（实际：\(tool.errorMessage ?? "无")）")
+        expect(tool.response == nil, "取消后不应留下响应")
     }
 
     /// 关闭本地终端标签时必须结束 shell。

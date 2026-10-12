@@ -11,6 +11,10 @@ import Foundation
 /// HTTP 发送器。允许所有 HTTP 状态码（4xx/5xx 不抛错），仅传输层失败抛错。
 struct HTTPClient {
     /// 请求超时（秒）。
+    ///
+    /// 语义是**空闲超时**：限「等待下一段响应数据」的最长时间，每收到数据就重置，
+    /// 而不是整个请求的总时长。调用方通常传 `HTTPRequestModel.effectiveTimeout`（请求级可配），
+    /// 这里的默认值只在没人指定时兜底。
     var timeout: TimeInterval = 30
 
     /// 共享会话：**禁用响应缓存**。
@@ -59,6 +63,12 @@ struct HTTPClient {
         let response: URLResponse
         do {
             (body, isTruncated, response) = try await Self.receive(urlRequest, maxBytes: Self.maxBodyBytes)
+        } catch is CancellationError {
+            throw HTTPClientError.cancelled
+        } catch let error as URLError where error.code == .cancelled {
+            // 取消在传输层表现为 `URLError.cancelled`（NSURLErrorCancelled），不是 CancellationError，
+            // 两条都要归一，否则「用户点了停止」会被当成网络故障弹红字。
+            throw HTTPClientError.cancelled
         } catch let error as URLError {
             throw HTTPClientError.transport(error.localizedDescription)
         }
@@ -122,6 +132,17 @@ struct HTTPClient {
     ///
     /// 若将来这个吞吐成为问题，可改为 task 级 `URLSessionDataDelegate` 分块收集 ——
     /// 全速、同样能在超限时取消，代价是要桥接 delegate 队列与 actor 隔离。
+    ///
+    /// ## 取消
+    ///
+    /// 让 `receive` 跑在自己的 task 里（`send` 侧持有句柄），用户点「停止」时 cancel 它。
+    /// 两处保证及时退出：
+    /// 1. `URLSession.AsyncBytes` 自身响应任务取消，序列会以 `URLError.cancelled` 结束；
+    /// 2. 循环里每 `cancelCheckStride` 字节再显式查一次 —— 正在高速收大响应时，
+    ///    这能让停止在「下一次检查」就生效，不必等到底层把整个 chunk 推完。
+    ///
+    /// 注意别把第 2 条写成逐字节 `Task.checkCancellation()`：它给热循环加了不可预测的分支，
+    /// 而单次取消延迟的上界本来就是「64 KB 的收包时间」（亚毫秒级），没必要。
     @concurrent
     private static func receive(
         _ urlRequest: URLRequest,
@@ -131,15 +152,28 @@ struct HTTPClient {
         var body = Data()
         body.reserveCapacity(min(maxBytes, 256 * 1024))
         var isTruncated = false
+        var sinceCancelCheck = 0
         for try await byte in bytes {
             if body.count >= maxBytes {
                 isTruncated = true
                 break
             }
             body.append(byte)
+            sinceCancelCheck += 1
+            if sinceCancelCheck >= Self.cancelCheckStride {
+                sinceCancelCheck = 0
+                try Task.checkCancellation()
+            }
         }
         return (body, isTruncated, response)
     }
+
+    /// 取消检查的字节间隔（64 KB）。
+    ///
+    /// 必须 `nonisolated`：本工程默认 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`，
+    /// 静态常量也会被算作主 actor 隔离的，而 `receive` 用 `@concurrent` 跑在 actor 之外 ——
+    /// 少了这个标注就是一个「Swift 6 下会变成错误」的告警。
+    private nonisolated static let cancelCheckStride = 65_536
 
     // MARK: - URLRequest 构造
 
@@ -183,6 +217,8 @@ enum HTTPClientError: LocalizedError {
     case invalidURL(String)
     case notHTTPResponse
     case transport(String)
+    /// 用户在界面上主动「停止」。与传输失败区分开，好让调用方走中性提示而不是红色报错。
+    case cancelled
 
     var errorDescription: String? {
         switch self {
@@ -192,6 +228,8 @@ enum HTTPClientError: LocalizedError {
             return "响应不是有效的 HTTP 响应"
         case .transport(let message):
             return "网络请求失败：\(message)"
+        case .cancelled:
+            return "请求已取消"
         }
     }
 }

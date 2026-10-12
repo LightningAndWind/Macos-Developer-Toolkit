@@ -118,6 +118,32 @@ struct HTTPRequestModel: Hashable, Codable {
     var body: HTTPBodyModel = HTTPBodyModel()
     var auth: HTTPAuthModel = HTTPAuthModel()
 
+    /// 请求超时（秒）。
+    ///
+    /// 语义是 **空闲超时**，不是总时长：`URLRequest.timeoutInterval` 限的是「等待下一段响应数据」
+    /// 的最长时间，每收到一段数据就重新计时。于是两类接口的表现完全不同：
+    /// - **流式（SSE / chunked）**：只要相邻两块的间隔不超过该值就不会超时，整段生成可以远超它；
+    /// - **非流式**：必须能等完从发出到首个字节的全部时间 —— 长耗时 LLM 生成正是卡在这里，
+    ///   默认 30 秒对「先想 60 秒再一次性吐 JSON」的接口必然超时。
+    var timeoutSeconds: Int = HTTPRequestModel.defaultTimeoutSeconds
+
+    /// 超时取值区间（秒）。下限 1 秒，避免手输 0 或负数被 URLSession 当成「立即超时」；
+    /// 上限 1 小时，足够覆盖最慢的非流式生成。
+    static let minTimeoutSeconds = 1
+    static let maxTimeoutSeconds = 3600
+    static let defaultTimeoutSeconds = 30
+
+    /// 编辑器里的常用档位（秒）。
+    static let timeoutPresets = [15, 30, 60, 120, 300]
+
+    /// 落到 `URLRequest.timeoutInterval` 的实际秒数。
+    ///
+    /// 界面上是自由输入的文本框，越界值在这里统一收口 —— 否则一个手误的 `0`
+    /// 会让请求「秒失败」，而现象是「网络请求失败」，完全看不出是自己填的超时。
+    var effectiveTimeout: TimeInterval {
+        TimeInterval(min(max(timeoutSeconds, Self.minTimeoutSeconds), Self.maxTimeoutSeconds))
+    }
+
     var trimmedURLString: String { urlString.trimmingCharacters(in: .whitespacesAndNewlines) }
     var isEmpty: Bool { trimmedURLString.isEmpty }
 
@@ -168,5 +194,30 @@ enum HTTPQueryUtil {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         return string.addingPercentEncoding(withAllowedCharacters: allowed) ?? string
+    }
+}
+
+// MARK: - 兼容旧数据的解码
+
+extension HTTPRequestModel {
+    /// 自定义解码（放在扩展里，保留编译器合成的逐成员初始化器，与 `SSHProfile` 同款处理）。
+    ///
+    /// 起因：`timeoutSeconds` 是后补字段，而请求模型会被 JSON 编码进 SQLite ——
+    /// 集合存 `http_requests.request_json`（`HTTPCollectionStore`），
+    /// 历史存 `http_history` 的请求 blob（`HTTPHistoryStore`），会话快照里也有一份。
+    ///
+    /// 合成的 `init(from:)` **不会**回退到属性默认值：缺键直接抛 `keyNotFound`，
+    /// 而集合与历史两处读取都写成 `try?` —— 一旦漏掉这里，升级后旧集合会**静默变空**、
+    /// 旧历史整条消失，且没有任何报错，排查起来极其费劲。故新字段一律 `decodeIfPresent` 兜底。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        method = try c.decode(String.self, forKey: .method)
+        urlString = try c.decode(String.self, forKey: .urlString)
+        params = try c.decode([HTTPKV].self, forKey: .params)
+        headers = try c.decode([HTTPKV].self, forKey: .headers)
+        body = try c.decode(HTTPBodyModel.self, forKey: .body)
+        auth = try c.decode(HTTPAuthModel.self, forKey: .auth)
+        // 后补字段：旧记录没有这个键，缺失即回落到默认档。
+        timeoutSeconds = try c.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? Self.defaultTimeoutSeconds
     }
 }

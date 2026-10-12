@@ -28,6 +28,18 @@ enum HTTPDisplay {
         ms < 1000 ? "\(ms) ms" : String(format: "%.2f s", Double(ms) / 1000)
     }
 
+    /// 超时秒数的紧凑文案：整分钟用 m、整小时用 h，其余用 s（30 → `30s`，120 → `2m`，3600 → `1h`）。
+    ///
+    /// 先夹到合法区间再格式化：文本框允许自由输入，`5000` 这类越界值会被
+    /// `effectiveTimeout` 收口成上限，标签若照原样显示就会出现「界面写着 5000，实际按 1 小时跑」的错位。
+    static func timeoutLabel(_ seconds: Int) -> String {
+        let clamped = min(max(seconds, HTTPRequestModel.minTimeoutSeconds),
+                          HTTPRequestModel.maxTimeoutSeconds)
+        if clamped % 3600 == 0 { return "\(clamped / 3600)h" }
+        if clamped % 60 == 0 { return "\(clamped / 60)m" }
+        return "\(clamped)s"
+    }
+
     /// 请求方法配色：方法选择器与历史记录共用，保证同一方法全局同色。
     static func color(forMethod method: String) -> Color {
         switch method.uppercased() {

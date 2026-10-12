@@ -42,6 +42,8 @@ struct ResponseViewerView: View {
             content(response)
             } else if tool.isLoading {
                 loadingState
+            } else if tool.lastRequestCancelled {
+                cancelledState
             } else {
                 emptyState
             }
@@ -250,6 +252,18 @@ struct ResponseViewerView: View {
             "尚未发送请求",
             systemImage: "arrow.up.arrow.down.square",
             description: Text("填写地址后点“发送”或按 ⌘↵。")
+        )
+    }
+
+    /// 用户主动「停止」后的中性空状态。
+    ///
+    /// 不复用红色错误条：主动取消不是故障，弹警告只会让人以为接口出了问题。
+    /// 但仍然显式给个反馈 —— 否则界面和「还没发过请求」长得一模一样，会让人怀疑停止没生效。
+    private var cancelledState: some View {
+        ContentUnavailableView(
+            "请求已取消",
+            systemImage: "stop.circle",
+            description: Text("已中断在途请求。可在请求栏调整超时后重新发送。")
         )
     }
 
