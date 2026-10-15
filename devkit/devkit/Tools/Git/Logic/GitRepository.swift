@@ -171,6 +171,17 @@ struct GitRepository {
         return dict.values.sorted { $0.name < $1.name }
     }
 
+    /// 修改远程地址：fetch 与 push 一并更新（本工具不区分双向地址，保持两者一致）。
+    func setRemoteURL(name: String, url: String) async throws {
+        try await require(["remote", "set-url", name, url])
+        try await require(["remote", "set-url", "--push", name, url])
+    }
+
+    /// 新增远程。
+    func addRemote(name: String, url: String) async throws {
+        try await require(["remote", "add", name, url])
+    }
+
     func stashList() async throws -> [GitStashEntry] {
         let out = try await run(["stash", "list", "--format=%gd%x1f%s"])
         return out.stdout.split(separator: "\n").compactMap { line in

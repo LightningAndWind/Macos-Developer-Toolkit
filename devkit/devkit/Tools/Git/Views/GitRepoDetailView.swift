@@ -17,6 +17,7 @@ struct GitRepoDetailView: View {
     @State private var editing: GitRepo?
     @State private var cloning = false
     @State private var showKeys = false
+    @State private var showRemoteEditor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -43,6 +44,9 @@ struct GitRepoDetailView: View {
         }
         .sheet(isPresented: $showKeys) {
             GitKeyManagerView { keys = GitKeyStore.all() }
+        }
+        .sheet(isPresented: $showRemoteEditor) {
+            GitRemoteEditorSheet(tool: tool)
         }
     }
 
@@ -113,6 +117,7 @@ struct GitRepoDetailView: View {
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
+                remoteRow
             }
             Spacer()
             keyIndicator
@@ -222,6 +227,34 @@ struct GitRepoDetailView: View {
         }
     }
 
+    /// 远程地址行：展示首选远程（origin 优先），铅笔按钮弹出配置抽屉；未配置时给出引导文案。
+    private var remoteRow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "link")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+            if let remote = tool.primaryRemote {
+                Text(remote.displayURL)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("未配置远程地址")
+                    .font(.system(size: 10)).foregroundStyle(.tertiary)
+            }
+            Button {
+                showRemoteEditor = true
+            } label: {
+                Image(systemName: "pencil").font(.system(size: 9))
+            }
+            .buttonStyle(.borderless)
+            .pointingHandOnHover()
+            .help("配置远程仓库地址")
+            .disabled(tool.isBusy)
+        }
+    }
+
     private func labelRow(_ text: String, checked: Bool) -> some View {
         HStack { Text(text); Spacer(); if checked { Image(systemName: "checkmark") } }
     }
@@ -277,5 +310,107 @@ private struct SectionChip: View {
         }
         .buttonStyle(.plain)
         .pointingHandOnHover()
+    }
+}
+
+/// 远程地址配置抽屉：逐条展示远程并可直接改地址（保存时 fetch/push 一并更新）；无远程时可新增。
+struct GitRemoteEditorSheet: View {
+    @Bindable var tool: GitTool
+    @Environment(\.dismiss) private var dismiss
+
+    /// 每个远程一份编辑草稿（key = 远程名）：保存前输入框与 tool.remotes 互不干扰。
+    @State private var drafts: [String: String] = [:]
+    @State private var newName = ""
+    @State private var newURL = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("远程仓库地址").font(.headline)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if tool.remotes.isEmpty {
+                        Text("尚未配置远程仓库，可在下方添加。")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(tool.remotes) { remote in
+                        remoteEditorRow(remote)
+                    }
+                }
+                .padding(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: .infinity)
+
+            Divider()
+            addRemoteRow
+            HStack {
+                Spacer()
+                Button("完成") { dismiss() }
+            }
+        }
+        .padding(20)
+        .frame(width: 560, height: 380)
+        .task {
+            drafts = Dictionary(uniqueKeysWithValues: tool.remotes.map { ($0.name, $0.displayURL) })
+        }
+    }
+
+    @ViewBuilder
+    private func remoteEditorRow(_ remote: GitRemote) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(remote.name).font(.system(size: 12, weight: .semibold, design: .monospaced))
+                Spacer()
+                Button("保存") {
+                    let url = trimmed(drafts[remote.name] ?? "")
+                    guard !url.isEmpty else { return }
+                    Task {
+                        await tool.setRemoteURL(name: remote.name, url: url)
+                        drafts[remote.name] = url
+                    }
+                }
+                .disabled(!canSave(remote))
+            }
+            TextField("远程地址", text: Binding(
+                get: { drafts[remote.name] ?? "" },
+                set: { drafts[remote.name] = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+        }
+    }
+
+    private var addRemoteRow: some View {
+        HStack(spacing: 8) {
+            Text("新增").font(.system(size: 12)).foregroundStyle(.secondary)
+            TextField("名称", text: $newName)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
+                .frame(width: 110)
+            TextField("https://… 或 git@…", text: $newURL)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11, design: .monospaced))
+            Button("添加") {
+                let n = trimmed(newName), u = trimmed(newURL)
+                guard !n.isEmpty, !u.isEmpty else { return }
+                Task {
+                    await tool.addRemote(name: n, url: u)
+                    drafts[n] = u
+                    newName = ""
+                    newURL = ""
+                }
+            }
+            .disabled(trimmed(newName).isEmpty || trimmed(newURL).isEmpty)
+        }
+    }
+
+    private func canSave(_ remote: GitRemote) -> Bool {
+        let url = trimmed(drafts[remote.name] ?? "")
+        return !url.isEmpty && url != remote.displayURL
+    }
+
+    private func trimmed(_ s: String) -> String {
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

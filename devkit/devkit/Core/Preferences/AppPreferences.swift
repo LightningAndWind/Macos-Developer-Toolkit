@@ -18,6 +18,9 @@ final class AppPreferences {
     /// 外观模式偏好键（跟随系统 / 浅色 / 深色）。视图侧用 `@AppStorage` 绑定，见 `AppAppearanceMode`。
     static let appearanceModeKey = "devkit.appearance.mode"
 
+    /// 防止锁屏开关偏好键。视图侧用 `@AppStorage` 绑定（见 `SidebarFooterBar`），生效走 `SleepKeeper`。
+    static let preventSleepKey = "devkit.sleep.prevent"
+
     private enum Keys {
         static let dataBookmark = "devkit.dataDir.bookmark"
         static let dataPath     = "devkit.dataDir.path"

@@ -376,6 +376,21 @@ final class GitTool: DevkitTool {
 
     // —— 远程 ——
 
+    /// 首选远程（origin 优先），用于横幅展示当前远程地址。
+    var primaryRemote: GitRemote? {
+        remotes.first { $0.name == "origin" } ?? remotes.first
+    }
+
+    /// 修改远程地址（fetch 与 push 一并更新）。
+    func setRemoteURL(name: String, url: String) async {
+        await perform({ try await $0.setRemoteURL(name: name, url: url) }, success: "已更新远程「\(name)」的地址")
+    }
+
+    /// 新增远程。
+    func addRemote(name: String, url: String) async {
+        await perform({ try await $0.addRemote(name: name, url: url) }, success: "已添加远程「\(name)」")
+    }
+
     func fetch() async { await performStreaming(title: "git fetch", presentsConsole: false, success: "已 fetch") { git, line in try await git.fetch(remote: nil, onLine: line) } }
     func pull() async { await performStreaming(title: "git pull", presentsConsole: false, syncFailure: true, success: "已拉取") { git, line in try await git.pull(onLine: line) } }
     func push() async { await performStreaming(title: "git push", presentsConsole: false, success: "已推送") { git, line in try await git.push(onLine: line) } }
