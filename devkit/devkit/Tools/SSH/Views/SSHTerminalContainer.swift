@@ -54,7 +54,8 @@ struct SSHTerminalContainer: NSViewRepresentable {
         var client: SSHClient
         private weak var view: TerminalView?
         private var consumeTask: Task<Void, Never>?
-        private var started = false
+        /// 已订阅的输出流代际（对应 `SSHClient.streamGeneration`）；-1 = 尚未订阅过。
+        private var consumedGeneration = -1
         /// 观察终端 NSScroller 以驱动自绘滚动指示条（由宿主视图持有同款模型）。
         var scrollMonitor: TerminalScrollerMonitor?
 
@@ -75,11 +76,19 @@ struct SSHTerminalContainer: NSViewRepresentable {
         }
 
         /// 启动一个 Task 把 client.incoming 持续 feed 到终端（主线程）。
+        ///
+        /// 流是「每次连接一个」，代际随 `connect()` 自增。正常路径下本容器随
+        /// `SSHToolView` 的 `if case .connected` 分支切换销毁重建，Coordinator 是新的，
+        /// 这里只发生首次订阅；若 SwiftUI 因状态快速翻转复用了本 Coordinator
+        /// （.connected → … → .connected 未经渲染中间态），代际比较也会发现
+        /// 「流换了」，取消旧任务、改订新流 —— 旧任务的 cancel 只会终止那条
+        /// 已废弃的旧流，对新流的投递没有影响。
         func startConsumingIfNeeded() {
-            guard !started else { return }
-            started = true
-            consumeTask = Task { [weak self, weak view] in
-                guard let stream = self?.client.incoming else { return }
+            guard consumedGeneration != client.streamGeneration else { return }
+            consumedGeneration = client.streamGeneration
+            consumeTask?.cancel()
+            let stream = client.incoming
+            consumeTask = Task { [weak view] in
                 for await bytes in stream {
                     if Task.isCancelled { break }
                     guard let view else { continue }

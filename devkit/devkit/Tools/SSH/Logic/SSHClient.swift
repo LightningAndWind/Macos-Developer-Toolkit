@@ -28,8 +28,20 @@ final class SSHClient {
     var trustHandler: ((String, Int) async -> Bool)?
 
     /// 远端输出字节流；视图侧消费后 feed 给终端。
-    let incoming: AsyncStream<[UInt8]>
-    private let outputContinuation: AsyncStream<[UInt8]>.Continuation
+    ///
+    /// **每次连接一个新实例**（`connect()` 里经 `rebuildOutputStream()` 重建）：`AsyncStream`
+    /// 是单播且终态不可逆 —— 消费任务被 cancel、或迭代自然结束，整条流就永久终止，之后所有
+    /// `yield` 都被静默丢弃。若做成 client 级单例流（早期实现），「断开 → 重连」后：消费任务
+    /// 已随视图 dismantle 被 cancel → 流终止 → 新会话的远端输出全部丢失，且新消费任务
+    /// `for await` 立即收到结束 —— 表现为**终端永久空白但连接正常**，只有关标签重建 client
+    /// 才恢复。把流的生命周期改成「随连接」后，旧流的终止不再影响新会话。
+    @ObservationIgnored private(set) var incoming: AsyncStream<[UInt8]>
+    private var outputContinuation: AsyncStream<[UInt8]>.Continuation
+
+    /// 输出流代际号：每次重建流自增。消费端（`SSHTerminalContainer.Coordinator`）以此
+    /// 识别「流已更换」，取消旧任务、订阅新流 —— 覆盖 SwiftUI 因状态快速翻转
+    /// 复用同一 Coordinator、未重建消费任务的角落情况。
+    @ObservationIgnored private(set) var streamGeneration = 0
 
     // MARK: - NIO 内部
 
@@ -40,9 +52,24 @@ final class SSHClient {
     private let nio = NIOResources()
 
     init() {
-        var cont: AsyncStream<[UInt8]>.Continuation!
-        self.incoming = AsyncStream { cont = $0 }
-        self.outputContinuation = cont
+        let (stream, continuation) = Self.makeOutputStream()
+        self.incoming = stream
+        self.outputContinuation = continuation
+    }
+
+    /// 结束上一条流（立刻唤醒仍挂在上面的旧消费任务），为本次连接换一条新流。
+    private func rebuildOutputStream() {
+        outputContinuation.finish()
+        streamGeneration += 1
+        let (stream, continuation) = Self.makeOutputStream()
+        incoming = stream
+        outputContinuation = continuation
+    }
+
+    private static func makeOutputStream() -> (AsyncStream<[UInt8]>, AsyncStream<[UInt8]>.Continuation) {
+        var continuation: AsyncStream<[UInt8]>.Continuation!
+        let stream = AsyncStream { continuation = $0 }
+        return (stream, continuation)
     }
 
     // MARK: - 连接
@@ -50,6 +77,8 @@ final class SSHClient {
     /// 连接并进入交互 shell。失败/拒绝信任时更新 `state`，不抛出。
     func connect(profile: SSHProfile, cols: Int, rows: Int) async {
         guard !state.isLive else { return }
+        // 先换新流再连接：上一条流的终止（消费任务被 cancel / 已 finish）不影响本次会话。
+        rebuildOutputStream()
         state = .connecting
 
         // TOFU：未信任主机先询问；拒绝则中止。
@@ -89,10 +118,11 @@ final class SSHClient {
             let signal = AsyncSignal()
             nio.closeSignal = signal
 
+            // 捕获「本次连接」的 continuation 而非回头读 self 属性：重连后属性已指向新流，
+            // 旧连接迟到的字节应落进旧流（随之丢弃），不能串进新会话的终端。
+            let continuation = outputContinuation
             let shell = try await Self.openShell(on: conn, cols: cols, rows: rows,
-                                                 output: { [weak self] bytes in
-                                                     self?.outputContinuation.yield(bytes)
-                                                 },
+                                                 output: { bytes in continuation.yield(bytes) },
                                                  onClose: { signal.fire() })
             nio.shellChannel = shell
             state = .connected(host: profile.host)
@@ -112,16 +142,20 @@ final class SSHClient {
 
     /// 用户断开或标签关闭时调用。
     ///
-    /// **不要在这里 `outputContinuation.finish()`** —— `AsyncStream` 的 `finish()` 是终态，
-    /// 之后所有 `yield` 都会被静默丢弃。而消费端（`SSHTerminalContainer.Coordinator`）
-    /// 只在视图首次出现时订阅一次，于是「断开 → 重新连接」「换个目标」之后，
-    /// 新会话的远端输出会全部被丢掉 —— 表现为**终端再也不显示任何内容**（但连接其实是好的）。
-    /// 输出流的生命周期应跟随 client 而非单次连接：消费任务靠视图 `dismantleNSView` 里
-    /// 的 `cancel()` 结束，client 释放时 continuation 一起释放、流自然终止。
+    /// 这里把**当前连接**的流 finish 掉是安全的：流的生命周期随连接而非 client（见
+    /// `incoming` 的注释），重连时 `connect()` 会换一条新流。finish 还能让仍挂在这条流上
+    /// 的消费任务立刻结束，而不是干等。
+    ///
+    /// 历史：早期把流做成 client 级单例时这里**不能** finish —— `finish()` 是终态，
+    /// 之后的 yield 全部被静默丢弃，而消费端只在视图出现时订阅一次，「断开 → 重连」后
+    /// 新会话输出全被丢掉，表现为终端再也不显示任何内容（连接其实是好的）。同理，
+    /// 单例流时代连「消费任务被 cancel」都会终止流（`AsyncStream` 对取消同样终态化），
+    /// 这正是断开重连后终端空白的根因；两条约束都随「每次连接一个新流」一并解除。
     func disconnect() {
         outputTask?.cancel()
         outputTask = nil
         teardownChannels()
+        outputContinuation.finish()
         if case .idle = state { } else { state = .disconnected }
     }
 

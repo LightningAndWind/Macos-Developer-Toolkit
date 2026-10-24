@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>devkit · 开发者工具集</title>
+<meta name="description" content="面向开发者的轻量工具集：HTTP 请求、JSON 编辑与校验。标签页并行，本地优先。" />
+<link rel="icon" type="image/png" href="./assets/favicon.png" />
+<link rel="apple-touch-icon" href="./assets/appicon.png" />
+<link rel="stylesheet" href="./css/base.css" />
+<link rel="stylesheet" href="./css/shell.css" />
+<link rel="stylesheet" href="./css/tools.css" />
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img class="brand-icon" src="./assets/appicon.png" alt="" />
+      <span class="brand-name">devkit</span>
+      <span class="brand-tag">web</span>
+    </div>
+
+    <div class="sidebar-scroll" id="tab-scroll">
+      <div class="tab-list" id="tab-list"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="footer-icon" id="wake-lock" title="防止屏幕休眠" aria-pressed="false"></button>
+      <button class="footer-icon" id="open-settings" title="设置 (⌘,)"></button>
+      <a class="footer-icon" id="open-github" href="https://github.com/LightningAndWind/Macos-Developer-Toolkit"
+         target="_blank" rel="noopener noreferrer" title="开源项目 · GitHub" aria-label="开源项目 GitHub"></a>
+      <span class="footer-spacer"></span>
+      <span class="footer-hint" id="footer-hint">⌘T 新建</span>
+    </div>
+  </aside>
+
+  <div class="sidebar-resizer" id="sidebar-resizer" title="拖拽调整侧栏宽度"></div>
+
+  <main class="content" id="content">
+    <div class="pane-stack" id="pane-stack"></div>
+    <section class="launcher" id="launcher"></section>
+  </main>
+</div>
+
+<div id="overlay-root"></div>
+<noscript><div style="padding:40px;font-family:-apple-system,sans-serif">devkit web 需要启用 JavaScript。</div></noscript>
+<div id="toast-root" role="status" aria-live="polite"></div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "devkit-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "devkit 的网页端：标签式开发者工具集（HTTP 请求 / JSON 工具）",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

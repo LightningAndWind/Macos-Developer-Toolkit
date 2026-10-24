@@ -3,6 +3,17 @@
 
 > 内存太贵，只能用精简应用了。
 
+## 网页版
+
+`devkit-web/` 是同一套工具集的网页实现：标签页外壳、HTTP 请求与 JSON 工具，零依赖、零构建。
+
+```bash
+cd devkit-web && node server.js
+# http://127.0.0.1:5173
+```
+
+浏览器直连受同源策略限制，`server.js` 内置同源代理通道（`/api/proxy`），可发送任意请求头并读取完整响应头。SSH / SFTP / Git 需要本机 shell、文件系统与密钥存储，仍保留在桌面端。详见 [devkit-web/README.md](devkit-web/README.md)。
+
 ## 技术栈
 
 - **前端**：SwiftUI（AppKit 混合，终端等场景用 `NSViewRepresentable` 封装）
