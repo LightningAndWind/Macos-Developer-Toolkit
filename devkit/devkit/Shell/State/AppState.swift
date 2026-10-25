@@ -71,6 +71,7 @@ final class AppState {
             DebugSnapshot.runIfRequested(appState: self)
             SheetProbe.runIfRequested(appState: self)
             await DebugSelfCheck.runIfRequested()
+            AIAccessServer.shared.autostartIfNeeded()
             return
         }
         #endif
@@ -84,6 +85,7 @@ final class AppState {
             try DatabaseManager.shared.open(at: dbFile)
             restoreSession()
             phase = .ready
+            AIAccessServer.shared.autostartIfNeeded()
         } catch {
             phase = .failed(error.localizedDescription)
         }
@@ -97,6 +99,7 @@ final class AppState {
             try DatabaseManager.shared.open(at: dbFile)
             restoreSession()
             phase = .ready
+            AIAccessServer.shared.autostartIfNeeded()
         } catch {
             phase = .failed(error.localizedDescription)
         }
@@ -104,6 +107,7 @@ final class AppState {
 
     /// 重置数据目录设置（用于设置页；不删除实际文件）。
     func resetDataDirectory() {
+        AIAccessServer.shared.shutdown()
         DatabaseManager.shared.close()
         AppPreferences.shared.clearDataDirectory()
         phase = .needsOnboarding

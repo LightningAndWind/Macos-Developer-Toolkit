@@ -388,6 +388,13 @@ nonisolated final class AsyncSignal: Sendable {
             }
         }
     }
+
+    /// 是否已触发（供不能挂起的轮询路径同步查询；AI 接入的执行循环使用）。
+    var isFired: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return fired
+    }
 }
 
 enum SSHClientError: LocalizedError {

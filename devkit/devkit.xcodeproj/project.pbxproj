@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		22B1676430627B8E00EB7B63 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B03 /* SwiftTerm */; };
 		22B1676530627B8E00EB7B63 /* NIOSSH in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B04 /* NIOSSH */; };
+		22B1676630627B8E00EB7B63 /* MySQLNIO in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B05 /* MySQLNIO */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				22B1676530627B8E00EB7B63 /* NIOSSH in Frameworks */,
 				22B1676430627B8E00EB7B63 /* SwiftTerm in Frameworks */,
+				22B1676630627B8E00EB7B63 /* MySQLNIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			packageProductDependencies = (
 				A1B2C3D4E5F60718293A4B03 /* SwiftTerm */,
 				A1B2C3D4E5F60718293A4B04 /* NIOSSH */,
+				A1B2C3D4E5F60718293A4B05 /* MySQLNIO */,
 			);
 			productName = devkit;
 			productReference = 227A9D9F306154B6005EA9A4 /* devkit.app */;
@@ -106,6 +109,7 @@
 			packageReferences = (
 				A1B2C3D4E5F60718293A4B01 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				A1B2C3D4E5F60718293A4B02 /* XCRemoteSwiftPackageReference "swift-nio-ssh" */,
+				A1B2C3D4E5F60718293A4B06 /* XCRemoteSwiftPackageReference "mysql-nio" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 227A9DA0306154B6005EA9A4 /* Products */;
@@ -358,6 +362,14 @@
 				minimumVersion = 0.15.0;
 			};
 		};
+		A1B2C3D4E5F60718293A4B06 /* XCRemoteSwiftPackageReference "mysql-nio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/vapor/mysql-nio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -370,6 +382,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1B2C3D4E5F60718293A4B02 /* XCRemoteSwiftPackageReference "swift-nio-ssh" */;
 			productName = NIOSSH;
+		};
+		A1B2C3D4E5F60718293A4B05 /* MySQLNIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60718293A4B06 /* XCRemoteSwiftPackageReference "mysql-nio" */;
+			productName = MySQLNIO;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

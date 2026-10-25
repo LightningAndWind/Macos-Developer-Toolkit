@@ -151,6 +151,19 @@ final class DatabaseManager: @unchecked Sendable {
             updated_at REAL NOT NULL,
             key_json BLOB NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS db_connections(
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            username TEXT,
+            password TEXT,
+            database_name TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            conn_json BLOB NOT NULL
+        );
         """
         try _execLocked(sql)
     }

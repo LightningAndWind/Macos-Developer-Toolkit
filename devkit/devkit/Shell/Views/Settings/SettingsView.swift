@@ -20,6 +20,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
     case http
     case ssh
     case git
+    case ai
     case general
 
     var id: String { rawValue }
@@ -29,6 +30,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .http: return "HTTP 记录"
         case .ssh: return "终端会话"
         case .git: return "Git 仓库"
+        case .ai: return "AI 接入"
         case .general: return "通用"
         }
     }
@@ -38,6 +40,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .http: return "arrow.up.arrow.down.square"
         case .ssh: return "terminal"
         case .git: return "arrow.triangle.branch"
+        case .ai: return "sparkles"
         case .general: return "gearshape"
         }
     }
@@ -94,6 +97,9 @@ struct SettingsView: View {
     @State private var pendingDeletion: PendingDeletion?
     @State private var isConfirmingHistoryClear = false
     @State private var isConfirmingDataDirReset = false
+
+    // AI 接入分区（端口草稿，提交时应用）
+    @State private var aiPortDraft: String = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -219,6 +225,7 @@ struct SettingsView: View {
         case .http: httpPane
         case .ssh: sshPane
         case .git: gitPane
+        case .ai: aiPane
         case .general: generalPane
         }
     }
@@ -917,4 +924,262 @@ struct SettingsRecordRow: View {
 #Preview {
     SettingsView()
         .environment(AppState.shared)
+}
+
+// MARK: - AI 接入分区（MCP）
+
+private let aiServer = AIAccessServer.shared
+
+extension SettingsView {
+    /// 给 AI 客户端用的提示词：教模型如何使用 devkit 的 MCP 工具。
+    /// 可整体复制到 AGENTS.md / 系统提示词，配合工具描述一起生效。
+    private var aiUsagePrompt: String {
+        """
+        你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，
+        任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；
+        工具输出中的 [REDACTED] 是脱敏占位符。
+
+        服务器操作：
+        1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。
+        2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。
+        3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →
+           之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。
+        4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，
+           重新 ssh_open_session 即可。
+        5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。
+
+        Git 操作：
+        1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。
+        2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令
+           （如 ["pull"]、["log","-n","20"]、["commit","-m","…"]）。
+        3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。
+
+        数据库操作（MySQL / Redis）：
+        1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。
+        2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command
+           执行命令（command 每行一条，如 "SET k v\\nGET k"）。连接配置的密码与默认库会自动应用。
+        3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。
+        4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。
+
+        通用约定：
+        - exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。
+        - timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。
+        - 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。
+        """
+    }
+
+    private var aiPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                aiToggleBlock
+                if let err = aiServer.lastError {
+                    Label(err, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                }
+                aiConnectionBlock
+                aiZcodeConfigBlock
+                aiPromptBlock
+                aiAuditBlock
+            }
+            .padding(20)
+        }
+    }
+
+    private var aiToggleBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Toggle("启用 AI 接入（MCP）", isOn: Binding(
+                    get: { aiServer.enabled },
+                    set: { aiServer.setEnabled($0) }
+                ))
+                .font(.system(size: 12.5))
+                Spacer()
+                // 运行状态点
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(aiServer.running ? Color.green : Color.secondary.opacity(0.4))
+                        .frame(width: 7, height: 7)
+                    Text(aiServer.running ? "运行中" : (aiServer.enabled ? "启动中…" : "已停止"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("大模型（ZCode / Claude Code / Cursor 等 MCP 客户端）可通过本地接口使用 devkit 已保存的服务器连接与 Git 密钥执行任务；仅监听 127.0.0.1，需 Token 鉴权。输出中的 IP、用户名、密码一律替换为 [REDACTED]，凭据不会进入模型上下文。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var aiConnectionBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("连接信息").font(.system(size: 12, weight: .semibold))
+
+            aiKVRow(label: "端点", value: aiServer.endpointURL, copyable: true)
+            aiKVRow(label: "Token", value: aiServer.token.isEmpty ? "（启用后生成）" : aiServer.token,
+                    copyable: !aiServer.token.isEmpty)
+
+            HStack(spacing: 8) {
+                Button("重新生成 Token") { aiServer.regenerateToken() }
+                Text("重新生成后旧的立即作废，需同步更新客户端配置")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .controlSize(.small)
+
+            HStack(spacing: 8) {
+                Text("端口").font(.system(size: 12))
+                TextField("端口", text: $aiPortDraft)
+                    .frame(width: 80)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, design: .monospaced))
+                    .onSubmit { applyPortDraft() }
+                Button("应用") { applyPortDraft() }
+                    .controlSize(.small)
+                Text("修改后重启服务生效（1024-65535）")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.03)))
+        .onAppear { aiPortDraft = "\(aiServer.port)" }
+    }
+
+    private var aiZcodeConfigBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("客户端配置（ZCode）").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Button {
+                    copyToClipboard(aiServer.zcodeConfigJSON())
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
+                .controlSize(.small)
+            }
+            Text("合并进 ~/.zcode/cli/config.json 的 mcp.servers（或用「设置 → MCP」添加 HTTP 服务器，URL 与 Token 同下）；通用 mcpServers 格式（Claude Code / Cursor）可用端点与 Token 自行改写。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                Text(aiServer.enabled || !aiServer.token.isEmpty ? aiServer.zcodeConfigJSON() : "// 启用后显示")
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(height: 128)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.04)))
+        }
+    }
+
+    private var aiPromptBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("AI 使用提示词").font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Button {
+                    copyToClipboard(aiUsagePrompt)
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
+                .controlSize(.small)
+            }
+            Text("把这段说明放进 AI 客户端的上下文（AGENTS.md / CLAUDE.md / 系统提示词），模型即可正确使用这些工具。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ScrollView {
+                Text(aiUsagePrompt)
+                    .font(.system(size: 11))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(height: 190)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.04)))
+        }
+    }
+
+    private var aiAuditBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("最近调用").font(.system(size: 12, weight: .semibold))
+                if !aiServer.auditLog.isEmpty {
+                    countBadge(aiServer.auditLog.count)
+                }
+                Spacer()
+                Button("清空", role: .destructive) { aiServer.clearAudit() }
+                    .controlSize(.small)
+            }
+            if aiServer.auditLog.isEmpty {
+                emptyHint("还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。")
+            } else {
+                let entries = Array(aiServer.auditLog.suffix(50).reversed())
+                VStack(spacing: 0) {
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: entry.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(entry.ok ? Color.green : Color.red)
+                                .padding(.top, 2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.tool)
+                                    .font(.system(size: 12, weight: .medium))
+                                Text(entry.summary)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                            Text("\(entry.time.formatted(.dateTime.hour().minute().second())) · \(entry.durationMS)ms")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 2)
+                        }
+                        .padding(.vertical, 5)
+                        if index < entries.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func aiKVRow(label: String, value: String, copyable: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(label).font(.system(size: 12)).frame(width: 44, alignment: .leading)
+            Text(value)
+                .font(.system(size: 11.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if copyable {
+                Button {
+                    copyToClipboard(value)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("复制\(label)")
+            }
+        }
+    }
+
+    private func applyPortDraft() {
+        guard let p = Int(aiPortDraft.trimmingCharacters(in: .whitespaces)) else { return }
+        aiServer.applyPort(p)
+    }
+
+    private func copyToClipboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
 }

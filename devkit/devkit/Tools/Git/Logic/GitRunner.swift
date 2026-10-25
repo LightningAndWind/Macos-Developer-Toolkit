@@ -18,7 +18,9 @@ struct GitProcessOutput {
     let exitCode: Int32
     let stdout: String
     let stderr: String
-    var succeeded: Bool { exitCode == 0 }
+    /// 达到可选超时被主动终止（仅 AI 接入路径传超时；UI 路径恒为 false）。
+    var timedOut = false
+    var succeeded: Bool { exitCode == 0 && !timedOut }
 
     /// 失败时的可读信息：优先 stderr，退回退出码。
     var errorText: String {
@@ -39,12 +41,14 @@ enum GitRunner {
     ///   - arguments: 参数数组（不 shell 解释，直接 argv 传递，天然防注入）。
     ///   - workingDirectory: 工作目录（仓库路径）；nil 用当前目录。
     ///   - environment: 叠加到继承环境之上的覆盖项。
+    ///   - timeout: 可选超时；到点终止子进程并在结果里标记 `timedOut`（UI 路径不传）。
     ///   - onLine: 每读到一行 stdout/stderr 时在主 actor 回调（供实时控制台）。
     static func run(
         executable: String,
         arguments: [String],
         workingDirectory: String?,
         environment: [String: String] = [:],
+        timeout: TimeInterval? = nil,
         onLine: (@MainActor (String) -> Void)? = nil
     ) async throws -> GitProcessOutput {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitProcessOutput, Error>) in
@@ -80,6 +84,15 @@ enum GitRunner {
                 if !data.isEmpty { collector.append(data, isStderr: true) }
             }
 
+            // 可选超时看护：到点标记并终止子进程；terminationHandler 随即收尾 resume。
+            let timeoutWatch = TimeoutWatch()
+            if let timeout {
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    timeoutWatch.markTimedOut()
+                    if process.isRunning { process.terminate() }
+                }
+            }
+
             process.terminationHandler = { proc in
                 // 收尾：flush 两个管道剩余数据，再回调完成。
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
@@ -87,7 +100,8 @@ enum GitRunner {
                 let out = collector.finalize()
                 let result = GitProcessOutput(exitCode: proc.terminationStatus,
                                               stdout: out.stdout,
-                                              stderr: out.stderr)
+                                              stderr: out.stderr,
+                                              timedOut: timeoutWatch.consume())
                 cont.resume(returning: result)
             }
 
@@ -105,9 +119,29 @@ enum GitRunner {
     static func git(_ arguments: [String],
                     at workingDirectory: String,
                     environment: [String: String] = [:],
+                    timeout: TimeInterval? = nil,
                     onLine: (@MainActor (String) -> Void)? = nil) async throws -> GitProcessOutput {
         try await run(executable: gitPath, arguments: arguments,
-                      workingDirectory: workingDirectory, environment: environment, onLine: onLine)
+                      workingDirectory: workingDirectory, environment: environment,
+                      timeout: timeout, onLine: onLine)
+    }
+}
+
+/// 超时看护标志：asyncAfter 线程标记，terminationHandler 线程读取，一次性。
+private final class TimeoutWatch: @unchecked Sendable {
+    private let lock = NSLock()
+    nonisolated(unsafe) private var timedOut = false
+
+    func markTimedOut() {
+        lock.lock()
+        timedOut = true
+        lock.unlock()
+    }
+
+    func consume() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return timedOut
     }
 }
 

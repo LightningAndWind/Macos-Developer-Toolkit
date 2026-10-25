@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             AppState.shared.saveSession()
+            // AI 接入：停掉本地 MCP 监听并关闭全部 SSH 会话（含系统 ssh 子进程）。
+            AIAccessServer.shared.shutdown()
         }
     }
 }

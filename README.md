@@ -19,6 +19,7 @@ cd devkit-web && node server.js
 - **前端**：SwiftUI（AppKit 混合，终端等场景用 `NSViewRepresentable` 封装）
 - **终端**：SwiftTerm
 - **SSH / SFTP**：SwiftNIO + NIOSSH（密码认证进程内实现），私钥认证走系统 `/usr/bin/ssh` 子进程
+- **数据库**：MySQL 走 mysql-nio（Swift 直连，无需本机客户端）；Redis 手写 RESP2 协议（零依赖）
 - **数据存储**：SQLite（HTTP 历史、集合、SSH 连接配置等）
 - **依赖管理**：Swift Package Manager
 - **工程**：Xcode 16 同步文件夹组，新增 Swift 文件自动纳入编译
@@ -129,6 +130,16 @@ cd devkit-web && node server.js
 - **Stash**：暂存当前改动（可带描述）、Pop / Apply / Drop
 - **高级**：rebase（含中止）/ cherry-pick / reset / tag，均带输出控制台
 
+### 数据库（网络）
+
+连接 MySQL / Redis，命令行式执行 SQL 与命令；连接同时可供 AI 通过本地 MCP 接口使用。
+
+- **连接管理**：MySQL（主机 / 端口 / 用户名 / 密码 / 默认库）与 Redis（可选 ACL 用户名 / 密码 / 默认 db 号）统一登记存 SQLite；类型切换时端口联动默认值（3306 / 6379）
+- **命令行式执行**：MySQL 输入 SQL（可多语句，返回 TSV 表格文本，NULL 显示为 NULL）；Redis 输入命令（每行一条，支持单双引号与转义），结果按 redis-cli 风格渲染（`(integer)` / `(nil)` / 数组缩进 / `(error)`）
+- **执行模型**：无状态单次执行——连接 → 认证 → 执行 → 断开；超时 30 秒、输出 512KB 截断（MySQL 另限 1000 行）
+- **输出区**：按方向着色（输入 / 结果 / 错误），时间戳、自动滚动、可选中复制、一键清空
+- **AI 接入**：连接别名可被 MCP 工具引用（`db_list_connections` / `db_query` / `db_command`），主机 / 用户名 / 密码不出现在模型上下文
+
 ### JSON 工具（数据）
 
 文本 / 树形双视图编辑、格式化、校验、键排序。
@@ -143,17 +154,32 @@ cd devkit-web && node server.js
 - 手写递归下降解析器，提供精确行列与尾逗号、单引号等错误提示
 - 无长期存储，但标签内容随会话快照自动留存，App 重启后原样还原
 
+## AI 接入（MCP）
+
+内置一个 MCP（Model Context Protocol）服务器，让 ZCode / Claude Code / Cursor 等大模型客户端直接使用 devkit 已保存的服务器连接与 Git 密钥执行任务，而 **IP、用户名、密码、密钥路径永远不会进入模型上下文**。默认关闭，在「设置 → AI 接入」中启用。
+
+- **形态**：Streamable HTTP 传输，仅绑定 `127.0.0.1:51790`（可改），Bearer Token 鉴权；协议层与 HTTP 层均为手写最小实现（零新依赖）
+- **工具（10 个）**：SSH 4 个（`ssh_list_servers` / `ssh_open_session` / `ssh_exec` / `ssh_close_session`）、Git 3 个（`git_list_repos` / `git_status` / `git_run`）、数据库 3 个（`db_list_connections` / `db_query` / `db_command`）——模型只见「服务器 / 仓库 / 连接」的别名，凭据在 app 进程内部取用
+- **远程执行**：无 pty shell + 标记协议，密码认证走进程内 NIOSSH、私钥认证走系统 `/usr/bin/ssh`（与终端工具双引擎约定一致）；支持跨命令保持 cd / 环境变量的持久会话（空闲 30 分钟回收），也支持一次性执行；默认 30 秒超时、单流输出 512KB 截断
+- **数据库执行**：MySQL 走 mysql-nio、Redis 手写 RESP2 客户端；连接配置的密码与默认库自动应用（AUTH / SELECT）
+- **脱敏**：所有出站文本（结果、错误消息、审计摘要）经 Redactor 擦除已知秘密（host / 用户名 / 密码 / 私钥路径 / URL 内嵌凭据），替换为 `[REDACTED]`
+- **设置页**：端点与 Token 管理、ZCode 配置 JSON 一键复制、**AI 使用提示词**（复制进 AGENTS.md / 系统提示词即可让模型正确使用这组工具）、最近 200 次调用审计
+- **约束**：密码引擎沿用 TOFU——主机需先在「SSH 终端」工具连接过一次；远端登录 shell 需为 POSIX 系（bash/sh/zsh 等，fish/csh 暂不支持会话执行）
+
+威胁模型说明：本功能保证凭据不流经模型上下文 / 对话记录 / 云端日志（上下文卫生），不防御已在本地获得任意 shell 权限、可直接读取数据库文件的恶意程序——后者需要操作系统级沙箱，超出范围。
+
 ## 项目结构
 
 ```
 devkit/devkit/
 ├── Core/            # 数据、设计令牌、模型、偏好设置
+│   ├── AIAccess/    # AI 接入（MCP）：协议、HTTP 监听、工具目录、SSH 执行、脱敏、编排
 │   ├── Data/        # SQLite 管理与建表
 │   ├── DesignSystem/# 主题令牌、通用面板与滚动指示条
 │   ├── Models/      # 工具协议、注册表、标签/分组模型
 │   └── Preferences/ # 偏好键、咖啡杯防休眠、外观模式
 ├── Shell/           # 应用外壳：状态管理、标签/分组视图、菜单命令、设置面板
-├── Tools/           # 各工具（HTTP / SSH / SFTP / Git / JSON）
+├── Tools/           # 各工具（HTTP / SSH / SFTP / Git / DB / JSON）
 ├── Utilities/       # 手指光标、目录选择面板、窗口配置等辅助
 ├── ContentView.swift
 └── devkitApp.swift
