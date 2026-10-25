@@ -59,9 +59,11 @@ nonisolated enum MCPJSON: Sendable {
         objectValue?[key]
     }
 
-    /// 序列化为紧凑 JSON 文本。
+    /// 序列化为紧凑 JSON 文本（不转义正斜杠，路径保持 `/home/x` 而非 `\/home\/x`）。
     func encoded() -> String {
-        guard let data = try? JSONEncoder().encode(self) else { return "null" }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(self) else { return "null" }
         return String(decoding: data, as: UTF8.self)
     }
 }

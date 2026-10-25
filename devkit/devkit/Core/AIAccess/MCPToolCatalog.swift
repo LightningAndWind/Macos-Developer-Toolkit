@@ -180,7 +180,7 @@ final class MCPToolCatalog {
             .map { p in
                 .object([
                     "id": .string(p.id.uuidString),
-                    "name": .string(Redactor.redact(p.name)),
+                    "name": .string(p.name),
                     "authKind": .string(p.authKind.rawValue),
                     "defaultWorkingDirectory": p.normalizedWorkingDirectory
                         .map { .string(Redactor.redact($0)) } ?? .null,
@@ -189,7 +189,7 @@ final class MCPToolCatalog {
         let sessions: [MCPJSON] = SSHSessionRegistry.shared.summaries.map { s in
             .object([
                 "sessionId": .string(s.sessionId.uuidString),
-                "server": .string(Redactor.redact(s.server)),
+                "server": .string(s.server),
                 "authKind": .string(s.authKind),
                 "idleSeconds": .int(Int64(s.idleSeconds)),
             ])
@@ -204,11 +204,11 @@ final class MCPToolCatalog {
         let id = try await SSHSessionRegistry.shared.openSession(profile: profile, cwd: cwd)
         let result = MCPJSON.object([
             "sessionId": .string(id.uuidString),
-            "server": .string(Redactor.redact(profile.name)),
+            "server": .string(profile.name),
             "note": .string("会话保持 shell 状态；空闲 30 分钟或满 2 小时自动回收，超时也会被关闭，届时请重新开会话"),
         ])
         return DispatchOutcome(text: result.encoded(), isError: false,
-                               summary: "server=\(Redactor.redact(profile.name))")
+                               summary: "server=\(profile.name)")
     }
 
     private func exec(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
@@ -274,7 +274,7 @@ final class MCPToolCatalog {
         let repos: [MCPJSON] = GitRepoStore.allRepos().map { r in
             .object([
                 "id": .string(r.id.uuidString),
-                "alias": .string(Redactor.redact(r.alias)),
+                "alias": .string(r.alias),
                 "path": .string(r.path),
                 "hasBoundKey": .bool(r.keyID != nil),
             ])
@@ -304,7 +304,7 @@ final class MCPToolCatalog {
             "entries": .array(entries),
         ])
         return DispatchOutcome(text: Redactor.redact(result.encoded()), isError: false,
-                               summary: "repo=\(Redactor.redact(repo.alias))")
+                               summary: "repo=\(repo.alias)")
     }
 
     private func gitRun(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
@@ -327,7 +327,7 @@ final class MCPToolCatalog {
             "timedOut": .bool(out.timedOut),
         ])
         return DispatchOutcome(text: result.encoded(), isError: out.timedOut,
-                               summary: "repo=\(Redactor.redact(repo.alias)) git \(Redactor.redact(String(gitArgs.joined(separator: " ").prefix(120))))")
+                               summary: "repo=\(repo.alias) git \(Redactor.redact(String(gitArgs.joined(separator: " ").prefix(120))))")
     }
 
     // MARK: - 数据库工具
@@ -336,7 +336,7 @@ final class MCPToolCatalog {
         let connections: [MCPJSON] = DBConnectionStore.all().map { c in
             .object([
                 "id": .string(c.id.uuidString),
-                "name": .string(Redactor.redact(c.name)),
+                "name": .string(c.name),
                 "kind": .string(c.kind.rawValue),
                 "defaultDatabase": c.normalizedDatabase.map { .string($0) } ?? .null,
             ])
@@ -352,7 +352,7 @@ final class MCPToolCatalog {
         }
         let connection = try resolveDBConnection(args["connection"]?.stringValue)
         guard connection.kind == .mysql else {
-            throw MCPToolError(message: "连接「\(Redactor.redact(connection.name))」是 Redis 连接；SQL 请用 db_query 的 MySQL 连接，Redis 命令请用 db_command")
+            throw MCPToolError(message: "连接「\(connection.name)」是 Redis 连接；SQL 请用 db_query 的 MySQL 连接，Redis 命令请用 db_command")
         }
         let timeout = DBExec.clampTimeout(args["timeoutSeconds"]?.doubleValue)
         let result = try await DBExec.runMySQL(host: connection.host, port: connection.port,
@@ -363,7 +363,7 @@ final class MCPToolCatalog {
         var text = Redactor.redact(result.text)
         if result.truncated { text += "\n…（输出过长已截断）" }
         return DispatchOutcome(text: text, isError: false,
-                               summary: "db=\(Redactor.redact(connection.name)) sql=\(Redactor.redact(String(sql.prefix(120))))")
+                               summary: "db=\(connection.name) sql=\(Redactor.redact(String(sql.prefix(120))))")
     }
 
     private func dbCommand(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
@@ -372,7 +372,7 @@ final class MCPToolCatalog {
         }
         let connection = try resolveDBConnection(args["connection"]?.stringValue)
         guard connection.kind == .redis else {
-            throw MCPToolError(message: "连接「\(Redactor.redact(connection.name))」是 MySQL 连接；Redis 命令请用 db_command 的 Redis 连接，SQL 请用 db_query")
+            throw MCPToolError(message: "连接「\(connection.name)」是 MySQL 连接；Redis 命令请用 db_command 的 Redis 连接，SQL 请用 db_query")
         }
         let timeout = DBExec.clampTimeout(args["timeoutSeconds"]?.doubleValue)
         let result = try await DBExec.runRedis(host: connection.host, port: connection.port,
@@ -383,7 +383,7 @@ final class MCPToolCatalog {
         var text = Redactor.redact(result.text)
         if result.truncated { text += "\n…（输出过长已截断）" }
         return DispatchOutcome(text: text, isError: false,
-                               summary: "db=\(Redactor.redact(connection.name)) cmd=\(Redactor.redact(String(command.prefix(120))))")
+                               summary: "db=\(connection.name) cmd=\(Redactor.redact(String(command.prefix(120))))")
     }
 
     // MARK: - 解析与辅助

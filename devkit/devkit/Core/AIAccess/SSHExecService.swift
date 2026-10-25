@@ -80,6 +80,20 @@ enum SSHExecError: LocalizedError {
 // MARK: - 共享事件循环
 
 nonisolated enum SSHExec {
+    /// 底层 IO 错误 → 可读原因（不携带 host）。
+    static func ioErrorText(_ error: IOError) -> String {
+        switch error.errnoCode {
+        case ECONNREFUSED:
+            return "连接被拒绝（目标端口未开放）"
+        case ETIMEDOUT:
+            return "连接超时"
+        case EHOSTUNREACH, ENETUNREACH:
+            return "网络不可达"
+        default:
+            return error.localizedDescription
+        }
+    }
+
     /// 进程级共享事件循环组（单线程）。密码引擎的全部连接复用它；随进程退出释放，
     /// 生命周期与 DatabaseManager 等单例一致（NIOSSH 通道在会话关闭时逐一 close，
     /// 不做 group 级 shutdown，避免拆掉使用中的连接）。
@@ -212,6 +226,8 @@ nonisolated final class NIOSSHExecTransport: SSHExecTransport, @unchecked Sendab
         let conn: Channel
         do {
             conn = try await promise.futureResult.get()
+        } catch let error as SSHExecError {
+            throw error
         } catch let error as NIOConnectionError {
             // NIO 的 localizedDescription 只有 "NIOConnectionError error 1" 这类晦涩文本，
             // 且其 description 含目标 host —— 翻译成固定文案，避免敏感信息外流。
@@ -224,6 +240,21 @@ nonisolated final class NIOSSHExecTransport: SSHExecTransport, @unchecked Sendab
             throw SSHExecError.connectFailed(refused
                                              ? "连接被拒绝（目标端口未开放）"
                                              : "无法建立 TCP 连接（网络不可达或超时）")
+        } catch let error as IOError {
+            throw SSHExecError.connectFailed(SSHExec.ioErrorText(error))
+        } catch is SSHExecError {
+            throw SSHExecError.connectTimeout
+        } catch let error as NIOSSHError {
+            // 服务器拒绝认证后通常直接断 TCP（报 tcpShutdown），必须与网络故障区分，
+            // 否则模型会把凭据问题误判为网络波动而盲目重试。
+            let text = String(describing: error).lowercased()
+            if text.contains("auth") {
+                throw SSHExecError.connectFailed("认证失败：请检查 devkit 中该记录保存的用户名 / 密码 / 私钥")
+            }
+            throw SSHExecError.connectFailed("连接被远端关闭（常见原因：认证失败、服务器限制连接或网络中断）；若确认凭据无误可重试")
+        } catch {
+            // ChannelError 等底层类型 localizedDescription 晦涩（如 "ChannelError error 0"），统一为可读文案。
+            throw SSHExecError.connectFailed("无法建立连接（网络不可达、端口未开放或连接超时）")
         }
 
         lock.lock()

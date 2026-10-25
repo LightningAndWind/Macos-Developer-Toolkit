@@ -39,56 +39,45 @@ nonisolated enum DBExec {
         return min(max(value, minTimeout), maxTimeout)
     }
 
-    /// 执行 MySQL SQL（可多语句，返回最后一条结果集的 TSV 渲染）。
+    /// 执行 MySQL SQL（无状态：连 → 执行 → 断；MCP 接口用）。
     static func runMySQL(host: String, port: Int, username: String, password: String?,
                          database: String?, sql: String, timeout: TimeInterval) async throws -> DBExecResult {
-        nonisolated(unsafe) var timedOut = false
-        let loop = group.next()
-
-        let connectFuture = MySQLConnection.connect(
-            to: try SocketAddress.makeAddressResolvingHost(host, port: port),
-            username: username,
-            database: database ?? "",
-            password: password,
-            tlsConfiguration: nil,
-            on: loop
-        )
-        // 连接超时：到点 fail promise 并关掉迟到的连接（同 NIOSSHExecTransport 的模式）。
-        let connectPromise = loop.makePromise(of: MySQLConnection.self)
-        let connectTimeoutTask = loop.scheduleTask(in: .milliseconds(Int64(timeout * 1000))) {
-            timedOut = true
-            connectPromise.fail(DBExecError.connectFailed("连接超时"))
-            connectFuture.whenComplete { result in
-                if case .success(let late) = result { _ = late.close() }
-            }
-        }
-        connectFuture.whenComplete { result in
-            connectTimeoutTask.cancel()
-            guard !timedOut else {
-                if case .success(let late) = result { _ = late.close() }
-                return
-            }
-            connectPromise.completeWith(result)
-        }
-
-        let connection: MySQLConnection
+        let connection = try await openMySQL(host: host, port: port,
+                                             username: username, password: password,
+                                             database: database, timeout: timeout)
         do {
-            connection = try await connectPromise.futureResult.get()
-        } catch let error as MySQLError {
-            throw DBExecError.connectFailed(Self.mysqlErrorText(error))
-        } catch let error as IOError {
-            throw DBExecError.ioFailed(Self.ioErrorText(error))
+            let result = try await runMySQL(on: connection, sql: sql, timeout: timeout)
+            await closeMySQL(connection)
+            return result
         } catch {
-            throw DBExecError.connectFailed(error.localizedDescription)
+            await closeMySQL(connection)
+            throw error
         }
+    }
 
-        // 查询超时：到点 fail promise 并断开连接（查询随之失败）。
-        let queryPromise = loop.makePromise(of: [MySQLRow].self)
-        let queryFuture = connection.query(sql)
+    /// 打开会话式连接（含瞬时不可达自动重试）。应用内终端持有复用。
+    static func openMySQL(host: String, port: Int, username: String, password: String?,
+                          database: String?, timeout: TimeInterval) async throws -> MySQLConnection {
+        try await connectMySQLOnce(host: host, port: port, username: username,
+                                   password: password, database: database, timeout: timeout)
+    }
+
+    /// 会话式执行：在既有连接上执行 SQL（应用内终端复用连接，`use` 等会话状态自然延续）。
+    /// 查询超时会关闭连接（调用方下次重建）。
+    static func runMySQL(on connection: MySQLConnection, sql: String,
+                         timeout: TimeInterval) async throws -> DBExecResult {
+        let loop = connection.eventLoop
+        nonisolated(unsafe) var timedOut = false
+        nonisolated(unsafe) var collectedRows: [MySQLRow] = []
+        // 走 COM_QUERY 文本协议（simpleQuery）：USE / SET 等语句不被 prepared 协议支持
+        // （服务器错误 1295），mysql CLI 与 Navicat 用的也是文本协议。
+        let queryPromise = loop.makePromise(of: Void.self)
+        let queryFuture = connection.simpleQuery(sql, onRow: { collectedRows.append($0) })
         let queryTimeoutTask = loop.scheduleTask(in: .milliseconds(Int64(timeout * 1000))) {
             timedOut = true
             queryPromise.fail(DBExecError.queryTimeout)
-            _ = connection.close()
+            // whenComplete 持有 connection 直到关闭完成，避免 deinit 断言（见主路径注释）。
+            connection.close().whenComplete { _ in _ = connection }
         }
         queryFuture.whenComplete { result in
             queryTimeoutTask.cancel()
@@ -97,44 +86,40 @@ nonisolated enum DBExec {
         }
 
         do {
-            let rows = try await queryPromise.futureResult.get()
-            _ = connection.close()
-            return Self.renderMySQL(rows: rows)
+            try await queryPromise.futureResult.get()
+            // 必须等 close 完成：mysql-nio 的 deinit 断言「channel 已关闭」，
+            // fire-and-forget 的 close 在对象立即释放时会触发 assert 崩溃。
+            _ = try? await connection.close().get()
+            return Self.renderMySQL(rows: collectedRows)
         } catch let error as DBExecError {
-            _ = connection.close()
+            _ = try? await connection.close().get()
             throw error
         } catch let error as MySQLError {
-            _ = connection.close()
+            _ = try? await connection.close().get()
             // 服务端 SQL 错误（语法 / 权限 / 约束等）→ 可读错误文本。
             throw DBExecError.connectFailed(Self.mysqlErrorText(error))
         } catch let error as IOError {
-            _ = connection.close()
+            _ = try? await connection.close().get()
             throw DBExecError.ioFailed("执行中断：" + Self.ioErrorText(error))
         } catch {
-            _ = connection.close()
+            _ = try? await connection.close().get()
             throw DBExecError.connectFailed(error.localizedDescription)
         }
     }
 
-    /// 执行 Redis 命令（commandText 每非空行一条，命令行式语法）。
+    /// 执行 Redis 命令（无状态：连 + AUTH/SELECT → 执行 → 断；MCP 接口用）。
     static func runRedis(host: String, port: Int, username: String?, password: String?,
                          database: String?, commandText: String, timeout: TimeInterval) async throws -> DBExecResult {
-        let lines = commandText
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard !lines.isEmpty else {
-            throw DBExecError.redisProtocolError("没有可执行的命令")
-        }
-        let commands = lines.map { splitRedisCommand($0) }
-        if commands.contains(where: { $0.isEmpty }) {
-            throw DBExecError.redisProtocolError("存在无法解析的命令（检查引号是否闭合）")
-        }
-
-        let session = try await RedisSession.connect(host: host, port: port)
+        let session = try await openRedis(host: host, port: port, username: username,
+                                          password: password, database: database, timeout: timeout)
         defer { session.close() }
+        return try await runRedis(on: session, commandText: commandText, timeout: timeout)
+    }
 
-        var rendered: [String] = []
+    /// 打开会话式 Redis 连接（TCP + 认证 + 选库）。应用内终端持有复用。
+    static func openRedis(host: String, port: Int, username: String?, password: String?,
+                          database: String?, timeout: TimeInterval) async throws -> RedisSession {
+        let session = try await RedisSession.connect(host: host, port: port)
         do {
             // 认证（有密码才发；Redis 6+ ACL 用户名与密码一起发）。
             if let password {
@@ -153,6 +138,30 @@ nonisolated enum DBExec {
                     throw DBExecError.redisProtocolError("SELECT 失败：\(message)")
                 }
             }
+            return session
+        } catch {
+            session.close()
+            throw error
+        }
+    }
+
+    /// 会话式执行：在既有连接上执行命令（应用内终端复用连接）。
+    static func runRedis(on session: RedisSession, commandText: String,
+                         timeout: TimeInterval) async throws -> DBExecResult {
+        let lines = commandText
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else {
+            throw DBExecError.redisProtocolError("没有可执行的命令")
+        }
+        let commands = lines.map { splitRedisCommand($0) }
+        if commands.contains(where: { $0.isEmpty }) {
+            throw DBExecError.redisProtocolError("存在无法解析的命令（检查引号是否闭合）")
+        }
+
+        var rendered: [String] = []
+        do {
             for (line, parts) in zip(lines, commands) {
                 let reply = try await session.command(parts, timeout: timeout)
                 if case .error(let message) = reply {
@@ -176,9 +185,89 @@ nonisolated enum DBExec {
         return DBExecResult(ok: true, text: text, errorText: nil, truncated: truncated)
     }
 
+    /// 关闭会式连接（等待关闭完成，避免 mysql-nio deinit 断言）。
+    static func closeMySQL(_ connection: MySQLConnection) async {
+        _ = try? await connection.close().get()
+    }
+
+    private static func connectMySQLOnce(host: String, port: Int, username: String, password: String?,
+                                         database: String?, timeout: TimeInterval) async throws -> MySQLConnection {
+        // 瞬时不可达自动重试：内网 / VPN 目标首次 connect 常因路由或隧道未就绪被内核立即拒绝
+        // （ENETUNREACH / EHOSTUNREACH），一两秒后即恢复——自动重试一次。
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                return try await connectMySQLOnceInner(host: host, port: port, username: username,
+                                                       password: password, database: database, timeout: timeout)
+            } catch let error as IOError where attempt == 1 && isTransientUnreachable(error) {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+    }
+
+    private static func connectMySQLOnceInner(host: String, port: Int, username: String, password: String?,
+                                              database: String?, timeout: TimeInterval) async throws -> MySQLConnection {
+        nonisolated(unsafe) var timedOut = false
+        let loop = group.next()
+
+        let connectFuture = MySQLConnection.connect(
+            to: try SocketAddress.makeAddressResolvingHost(host, port: port),
+            username: username,
+            database: database ?? "",
+            password: password,
+            tlsConfiguration: nil,
+            on: loop
+        )
+        // 连接超时：到点 fail promise 并关掉迟到的连接（同 NIOSSHExecTransport 的模式）。
+        let connectPromise = loop.makePromise(of: MySQLConnection.self)
+        let connectTimeoutTask = loop.scheduleTask(in: .milliseconds(Int64(timeout * 1000))) {
+            timedOut = true
+            connectPromise.fail(DBExecError.connectFailed("连接超时"))
+            connectFuture.whenComplete { result in
+                if case .success(let late) = result {
+                    late.close().whenComplete { _ in _ = late }
+                }
+            }
+        }
+        connectFuture.whenComplete { result in
+            connectTimeoutTask.cancel()
+            guard !timedOut else {
+                if case .success(let late) = result {
+                    late.close().whenComplete { _ in _ = late }
+                }
+                return
+            }
+            connectPromise.completeWith(result)
+        }
+
+        do {
+            return try await connectPromise.futureResult.get()
+        } catch let error as MySQLError {
+            throw DBExecError.connectFailed(mysqlErrorText(error))
+        } catch let error as IOError {
+            throw DBExecError.ioFailed(ioErrorText(error))
+        } catch let error as DBExecError {
+            throw error
+        } catch {
+            throw DBExecError.connectFailed(error.localizedDescription)
+        }
+    }
+
+    /// 瞬时不可达类错误（值得重试）；ECONNREFUSED（端口未开）不在此列——重试无意义。
+    fileprivate static func isTransientUnreachable(_ error: IOError) -> Bool {
+        switch error.errnoCode {
+        case EHOSTUNREACH, ENETUNREACH, ETIMEDOUT:
+            return true
+        default:
+            return false
+        }
+    }
+
     // MARK: - MySQL 渲染与错误翻译
 
-    /// 行集 → TSV 文本；空结果返回 "OK（无结果集）"。
+    /// 行集 → mysql CLI 风格的 ASCII 表格（+---+ 边框、右缘竖线、`N rows in set` 尾注）；
+    /// 无结果集时输出 `Query OK`（文本协议不回传 affected rows）。
     private static func renderMySQL(rows: [MySQLRow]) -> DBExecResult {
         let capRows = 1000
         var truncated = false
@@ -188,23 +277,47 @@ nonisolated enum DBExec {
             truncated = true
         }
 
+        // 单元格文本（NULL 显示为 NULL）。
+        func cellText(_ row: MySQLRow, _ index: Int) -> String {
+            guard index < row.columnDefinitions.count else { return "NULL" }
+            let column = row.columnDefinitions[index]
+            let data = MySQLData(type: column.columnType,
+                                 format: row.format,
+                                 buffer: index < row.values.count ? row.values[index] : nil,
+                                 isUnsigned: column.flags.contains(.COLUMN_UNSIGNED))
+            guard data.buffer != nil else { return "NULL" }
+            return data.string ?? "NULL"
+        }
+
         guard let first = limited.first else {
-            return DBExecResult(ok: true, text: "OK（无结果集）", errorText: nil, truncated: truncated)
+            return DBExecResult(ok: true, text: "Query OK", errorText: nil, truncated: truncated)
         }
 
         let columns = first.columnDefinitions.map(\.name)
-        var lines = [columns.joined(separator: "\t")]
-        for row in limited {
-            lines.append((0..<columns.count).map { index in
-                let column = row.columnDefinitions[index]
-                let data = MySQLData(type: column.columnType,
-                                     format: row.format,
-                                     buffer: index < row.values.count ? row.values[index] : nil,
-                                     isUnsigned: column.flags.contains(.COLUMN_UNSIGNED))
-                return data.buffer == nil ? "NULL" : (data.string ?? "NULL")
-            }.joined(separator: "\t"))
+        let tableRows = limited.map { row in (0..<columns.count).map { cellText(row, $0) } }
+        // 列宽 = max(列名, 各单元格) 的字符数（与 mysql CLI 一致按字符数，CJK 会略窄）。
+        var widths = columns.map(\.count)
+        for row in tableRows {
+            for (index, value) in row.enumerated() where index < widths.count {
+                widths[index] = max(widths[index], value.count)
+            }
         }
-        var text = lines.joined(separator: "\n") + "\n(\(rows.count) 行)"
+        func pad(_ text: String, _ width: Int) -> String {
+            text.count >= width ? text : text + String(repeating: " ", count: width - text.count)
+        }
+        let separator = "+" + widths.map { String(repeating: "-", count: $0 + 2) }.joined(separator: "+") + "+"
+        func line(_ values: [String]) -> String {
+            "|" + zip(values, widths).map { " \(pad($0, $1)) " }.joined(separator: "|") + "|"
+        }
+
+        var lines = [separator, line(columns), separator]
+        for row in tableRows {
+            lines.append(line(row))
+        }
+        lines.append(separator)
+        lines.append("\(rows.count) row\(rows.count == 1 ? "" : "s") in set")
+
+        var text = lines.joined(separator: "\n")
         if text.utf8.count > outputCap {
             text = String(decoding: Data(text.utf8.prefix(outputCap)), as: UTF8.self)
             truncated = true
@@ -351,7 +464,20 @@ nonisolated final class RedisSession: @unchecked Sendable {
         self.replyBox = replyBox
     }
 
+    /// 建连（瞬时不可达自动重试一次，与 MySQL 引擎同理）。
     static func connect(host: String, port: Int) async throws -> RedisSession {
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                return try await connectOnce(host: host, port: port)
+            } catch let error as IOError where attempt == 1 && DBExec.isTransientUnreachable(error) {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+    }
+
+    private static func connectOnce(host: String, port: Int) async throws -> RedisSession {
         let replyBox = ReplyBox()
         let bootstrap = ClientBootstrap(group: DBExec.group)
             .channelInitializer { channel in
@@ -419,6 +545,9 @@ nonisolated final class RedisSession: @unchecked Sendable {
         channel.writeAndFlush(buffer, promise: nil)
         return try await replyBox.awaitReply()
     }
+
+    /// 连接是否已断（供复用方在执行前检查，失效则重建）。
+    var isClosed: Bool { !channel.isActive }
 
     func close() {
         channel.close(mode: .all, promise: nil)

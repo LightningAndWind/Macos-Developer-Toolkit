@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import MySQLNIO
 import SwiftUI
 
 /// 一条输出条目。
@@ -60,6 +61,19 @@ final class DBTool: DevkitTool {
     /// 在途执行任务（关标签时取消——引擎的 await 会随 NIO future 完成自然结束）。
     private var runningTask: Task<Void, Never>?
 
+    /// MySQL 续行缓冲：未以 `;` 结尾的行在此积累（与 mysql CLI 的 `->` 续行一致）。
+    private(set) var pendingLines: [String] = []
+
+    // MARK: - 会话（应用内终端复用连接：use / 临时变量等状态跨执行延续）
+
+    private var mysqlConn: MySQLConnection?
+    private var redisSess: RedisSession?
+    /// 当前会话归属的连接配置（切换连接 → 旧会话作废）。
+    private var sessionConnectionID: UUID?
+    private var lastActivity = Date.distantPast
+    /// 空闲多久后断开（下次执行时惰性重建）。
+    private static let sessionIdleTimeout: TimeInterval = 5 * 60
+
     var selectedConnection: DBConnection? {
         connections.first { $0.id == selectedConnectionID }
     }
@@ -105,10 +119,18 @@ final class DBTool: DevkitTool {
         inputText = state.inputText
     }
 
-    /// 关标签：取消在途执行（结果不再回写即可；引擎连接自会关闭）。
+    /// 关标签：取消在途执行并断开会话连接。
     func teardownOnTabClose() {
         runningTask?.cancel()
         runningTask = nil
+        let mysql = mysqlConn
+        let redis = redisSess
+        mysqlConn = nil
+        redisSess = nil
+        if let mysql {
+            Task { await DBExec.closeMySQL(mysql) }
+        }
+        redis?.close()
     }
 
     // MARK: - 数据
@@ -130,14 +152,44 @@ final class DBTool: DevkitTool {
 
     // MARK: - 执行
 
-    /// 执行当前输入（输入可多行：MySQL 视作一段 SQL；Redis 每行一条命令）。
-    func execute() {
+    /// 提示符行回车。MySQL：无 `;` 结尾 → 续行（提示符变 `->`），有 `;` → 执行整段；
+    /// Redis：回车即执行（与 redis-cli 一致）。
+    func submitLine() {
         guard !isRunning, let connection = selectedConnection else { return }
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        append(.input, text)
+        let line = inputText
         inputText = ""
+        guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+
+        if connection.kind == .redis {
+            run(commandText: line, echo: "redis> " + line, connection: connection)
+            return
+        }
+
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.hasSuffix(";") {
+            let prefix = pendingLines.isEmpty ? "mysql> " : "    -> "
+            append(.input, prefix + line)
+            pendingLines.append(line)
+            return
+        }
+        if pendingLines.isEmpty {
+            run(commandText: trimmed, echo: "mysql> " + line, connection: connection)
+        } else {
+            var echo = "mysql> " + pendingLines[0]
+            for continued in pendingLines.dropFirst() {
+                echo += "\n    -> " + continued
+            }
+            echo += "\n    -> " + line
+            var full = pendingLines
+            full.append(line)
+            pendingLines.removeAll()
+            run(commandText: full.joined(separator: "\n"), echo: echo, connection: connection)
+        }
+    }
+
+    /// 执行一段 SQL / 命令（回显由调用方拼好传入）。
+    private func run(commandText: String, echo: String, connection: DBConnection) {
+        append(.input, echo)
         isRunning = true
 
         let kind = connection.kind
@@ -146,6 +198,7 @@ final class DBTool: DevkitTool {
         let username = connection.normalizedUsername
         let password = connection.normalizedPassword
         let database = connection.normalizedDatabase
+        let text = commandText
 
         runningTask = Task { [weak self] in
             defer { Task { @MainActor [weak self] in self?.isRunning = false } }
@@ -154,15 +207,15 @@ final class DBTool: DevkitTool {
                 switch kind {
                 case .mysql:
                     // MySQL 用户名必有（编辑器默认 root）。
-                    result = try await DBExec.runMySQL(host: host, port: port,
-                                                       username: username ?? "root",
-                                                       password: password, database: database,
-                                                       sql: text, timeout: DBExec.defaultTimeout)
+                    result = try await self?.mysqlExecute(host: host, port: port,
+                                                          username: username ?? "root",
+                                                          password: password, database: database,
+                                                          sql: text) ?? Self.failResult()
                 case .redis:
-                    result = try await DBExec.runRedis(host: host, port: port,
-                                                       username: username, password: password,
-                                                       database: database,
-                                                       commandText: text, timeout: DBExec.defaultTimeout)
+                    result = try await self?.redisExecute(host: host, port: port,
+                                                          username: username, password: password,
+                                                          database: database,
+                                                          commandText: text) ?? Self.failResult()
                 }
                 if let errorText = result.errorText {
                     self?.append(.error, errorText)
@@ -174,6 +227,117 @@ final class DBTool: DevkitTool {
             } catch {
                 self?.append(.error, error.localizedDescription)
             }
+        }
+    }
+
+    private nonisolated static func failResult() -> DBExecResult {
+        DBExecResult(ok: false, text: "", errorText: "内部状态错误", truncated: false)
+    }
+
+    // MARK: - 会话执行（复用连接；失效自动重建并重试一次）
+
+    private func mysqlExecute(host: String, port: Int, username: String, password: String?,
+                              database: String?, sql: String) async throws -> DBExecResult {
+        var connection = try await mysqlSession(host: host, port: port, username: username,
+                                                password: password, database: database)
+        do {
+            let result = try await DBExec.runMySQL(on: connection, sql: sql,
+                                                   timeout: DBExec.defaultTimeout)
+            lastActivity = .now
+            return result
+        } catch {
+            // 查询超时已由引擎断开连接；其余连接类错误重建一次重试（SQL 错误不重试）。
+            if isConnectionError(error), let fresh = try? await DBExec.openMySQL(host: host, port: port,
+                                                                                 username: username,
+                                                                                 password: password,
+                                                                                 database: database,
+                                                                                 timeout: DBExec.defaultTimeout) {
+                mysqlConn = fresh
+                lastActivity = .now
+                return try await DBExec.runMySQL(on: fresh, sql: sql, timeout: DBExec.defaultTimeout)
+            }
+            if case DBExecError.queryTimeout = error {
+                mysqlConn = nil
+            }
+            throw error
+        }
+    }
+
+    private func mysqlSession(host: String, port: Int, username: String, password: String?,
+                              database: String?) async throws -> MySQLConnection {
+        if let mysqlConn, sessionConnectionID == selectedConnectionID,
+           Date().timeIntervalSince(lastActivity) < Self.sessionIdleTimeout, !mysqlConn.isClosed {
+            return mysqlConn
+        }
+        await dropMySQLSession()
+        let fresh = try await DBExec.openMySQL(host: host, port: port, username: username,
+                                               password: password, database: database,
+                                               timeout: DBExec.defaultTimeout)
+        mysqlConn = fresh
+        sessionConnectionID = selectedConnectionID
+        lastActivity = .now
+        return fresh
+    }
+
+    private func dropMySQLSession() async {
+        guard let mysql = mysqlConn else { return }
+        mysqlConn = nil
+        await DBExec.closeMySQL(mysql)
+    }
+
+    private func redisExecute(host: String, port: Int, username: String?, password: String?,
+                              database: String?, commandText: String) async throws -> DBExecResult {
+        var session = try await redisSession(host: host, port: port, username: username,
+                                             password: password, database: database)
+        do {
+            let result = try await DBExec.runRedis(on: session, commandText: commandText,
+                                                   timeout: DBExec.defaultTimeout)
+            lastActivity = .now
+            return result
+        } catch {
+            if isConnectionError(error), !session.isClosed {
+                // 协议层异常但通道尚在：丢弃旧会话重建重试一次。
+                session.close()
+                redisSess = nil
+                let fresh = try await redisSession(host: host, port: port, username: username,
+                                                   password: password, database: database)
+                lastActivity = .now
+                return try await DBExec.runRedis(on: fresh, commandText: commandText,
+                                                 timeout: DBExec.defaultTimeout)
+            }
+            if session.isClosed {
+                redisSess = nil
+            }
+            throw error
+        }
+    }
+
+    private func redisSession(host: String, port: Int, username: String?, password: String?,
+                              database: String?) async throws -> RedisSession {
+        if let redisSess, sessionConnectionID == selectedConnectionID,
+           Date().timeIntervalSince(lastActivity) < Self.sessionIdleTimeout, !redisSess.isClosed {
+            return redisSess
+        }
+        redisSess?.close()
+        redisSess = nil
+        let fresh = try await DBExec.openRedis(host: host, port: port, username: username,
+                                               password: password, database: database,
+                                               timeout: DBExec.defaultTimeout)
+        redisSess = fresh
+        sessionConnectionID = selectedConnectionID
+        lastActivity = .now
+        return fresh
+    }
+
+    /// 连接类错误（值得重建会话重试）；SQL 语法 / 权限等服务器错误不在此列。
+    private func isConnectionError(_ error: Error) -> Bool {
+        switch error {
+        case DBExecError.queryTimeout, DBExecError.connectFailed, DBExecError.ioFailed:
+            return true
+        case DBExecError.redisProtocolError:
+            return true // 连接断开在协议层表现为「连接已关闭」
+        default:
+            return false
         }
     }
 

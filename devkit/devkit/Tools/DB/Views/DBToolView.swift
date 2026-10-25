@@ -12,14 +12,14 @@ struct DBToolView: View {
     @Bindable var tool: DBTool
     @State private var editingConnection: DBConnection?
     @State private var editingIsNew = false
+    /// 提示符输入行聚焦（点击输出区任意处回到输入）。
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             outputArea
-            Divider()
-            inputArea
         }
         .onAppear { tool.refreshConnections() }
         .sheet(item: $editingConnection) { draft in
@@ -109,115 +109,91 @@ struct DBToolView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - 输出区
+    // MARK: - 输出区（终端流：历史输出 + 末尾提示符输入行，始终从顶部开始）
 
     private var outputArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    if tool.output.isEmpty {
-                        VStack(spacing: 8) {
-                            Image(systemName: "terminal")
-                                .font(.system(size: 26))
-                                .foregroundStyle(.tertiary)
-                            Text(tool.connections.isEmpty
-                                 ? "先新建一条 MySQL / Redis 连接，然后在下方输入 SQL 或命令执行。"
-                                 : "在下方输入 SQL（MySQL）或 Redis 命令（每行一条），按 ⌘↩ 执行。")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .padding(.top, 60)
-                    }
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(tool.output) { entry in
                         outputRow(entry)
                             .id(entry.id)
                     }
+                    inputLine
+                        .id("input-line")
                 }
                 .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 200, alignment: .topLeading)
+                .contentShape(Rectangle())
+                .onTapGesture { isInputFocused = true }
             }
             .onChange(of: tool.output.count) { _, _ in
-                if let last = tool.output.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
-                }
+                proxy.scrollTo("input-line", anchor: .bottom)
             }
         }
         .background(Color.primary.opacity(0.02))
     }
 
     private func outputRow(_ entry: DBOutputEntry) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 6) {
-                Image(systemName: icon(for: entry.direction))
-                    .font(.system(size: 9))
-                    .foregroundStyle(color(for: entry.direction))
-                Text(entry.time.formatted(.dateTime.hour().minute().second()))
-                    .font(.system(size: 9.5, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            Text(entry.text)
+        // 终端流式风格：不带图标与时间戳，输入回显自带 mysql> / redis> 提示符。
+        Text(entry.text)
+            .font(.system(size: 11.5, design: .monospaced))
+            .foregroundStyle(color(for: entry.direction))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// 流末尾的提示符输入行：MySQL 以 `;` 结尾回车执行、否则续行（`->`）；Redis 回车即执行。
+    private var inputLine: some View {
+        HStack(alignment: .center, spacing: 0) {
+            Text(promptText)
                 .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(color(for: entry.direction))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(tool.selectedConnection == nil ? Color.secondary : Color.primary)
+            TextField("", text: $tool.inputText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11.5, design: .monospaced))
+                .focused($isInputFocused)
+                .disabled(tool.isRunning || tool.selectedConnection == nil)
+                .onSubmit { tool.submitLine() }
+                .placeholder(when: tool.inputText.isEmpty) {
+                    Text(tool.isRunning
+                         ? "执行中…"
+                         : (tool.selectedConnection == nil
+                            ? "先在上方选择连接"
+                            : "回车执行；SQL 未以 ; 结尾则换行继续输入"))
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Color.primary.opacity(0.25))
+                        .allowsHitTesting(false)
+                }
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
     }
 
-    private func icon(for direction: DBOutputEntry.Direction) -> String {
-        switch direction {
-        case .input: return "chevron.right"
-        case .output: return "text.justify.left"
-        case .error: return "exclamationmark.triangle"
-        case .info: return "info.circle"
-        }
+    /// 提示符：MySQL 续行态显示 `->`（与 mysql CLI 一致），Redis 恒为 `redis>`。
+    private var promptText: String {
+        guard let kind = tool.selectedConnection?.kind else { return "mysql> " }
+        if kind == .redis { return "redis> " }
+        return tool.pendingLines.isEmpty ? "mysql> " : "    -> "
     }
 
     private func color(for direction: DBOutputEntry.Direction) -> Color {
         switch direction {
-        case .input: return .secondary
+        case .input: return .primary
         case .output: return .primary
         case .error: return .red
         case .info: return .secondary
         }
     }
+}
 
-    // MARK: - 输入区
-
-    private var inputArea: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            Text(">")
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
-            TextField("输入 SQL 或 Redis 命令（⌘↩ 执行）", text: $tool.inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5, design: .monospaced))
-                .lineLimit(1...5)
-                .onSubmit { tool.execute() }
-                .disabled(tool.isRunning || tool.selectedConnection == nil)
-            Button {
-                tool.execute()
-            } label: {
-                if tool.isRunning {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 11))
-                }
-            }
-            .keyboardShortcut(.return, modifiers: .command)
-            .buttonStyle(.plain)
-            .padding(6)
-            .background(
-                Circle().fill(tool.selectedConnection != nil && !tool.isRunning
-                              ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.05))
-            )
-            .disabled(tool.isRunning || tool.selectedConnection == nil)
-            .help("执行（⌘↩）")
+extension View {
+    /// TextField(.plain) 的轻量 placeholder（覆盖在输入区上方，不拦截点击）。
+    @ViewBuilder
+    func placeholder(when condition: Bool, @ViewBuilder content: () -> some View) -> some View {
+        ZStack(alignment: .leading) {
+            if condition { content() }
+            self
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
     }
 }

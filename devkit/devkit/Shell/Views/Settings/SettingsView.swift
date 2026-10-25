@@ -1005,7 +1005,7 @@ extension SettingsView {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("大模型（ZCode / Claude Code / Cursor 等 MCP 客户端）可通过本地接口使用 devkit 已保存的服务器连接与 Git 密钥执行任务；仅监听 127.0.0.1，需 Token 鉴权。输出中的 IP、用户名、密码一律替换为 [REDACTED]，凭据不会进入模型上下文。")
+            Text("大模型客户端（ZCode / Claude Code / Cursor 等）通过 stdio 桥接脚本连接本机 devkit，使用已保存的服务器连接、Git 密钥与数据库连接执行任务。启用后桥接脚本自动生成，把下方配置复制进客户端即可，无需手工配置端口与请求头。服务仅监听 127.0.0.1；输出中的 IP、用户名、密码一律替换为 [REDACTED]，凭据不会进入模型上下文。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1051,16 +1051,22 @@ extension SettingsView {
     private var aiZcodeConfigBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text("客户端配置（ZCode）").font(.system(size: 12, weight: .semibold))
+                Text("客户端配置（stdio）").font(.system(size: 12, weight: .semibold))
                 Spacer()
                 Button {
                     copyToClipboard(aiServer.zcodeConfigJSON())
                 } label: {
-                    Label("复制", systemImage: "doc.on.doc")
+                    Label("复制 ZCode", systemImage: "doc.on.doc")
+                }
+                .controlSize(.small)
+                Button {
+                    copyToClipboard(aiServer.genericConfigJSON())
+                } label: {
+                    Label("复制通用 mcpServers", systemImage: "doc.on.doc")
                 }
                 .controlSize(.small)
             }
-            Text("合并进 ~/.zcode/cli/config.json 的 mcp.servers（或用「设置 → MCP」添加 HTTP 服务器，URL 与 Token 同下）；通用 mcpServers 格式（Claude Code / Cursor）可用端点与 Token 自行改写。")
+            Text("启用后桥接脚本已生成（\(AIAccessServer.bridgeScriptURL.path)）。把左侧 JSON 合并进 ~/.zcode/cli/config.json 的 mcp.servers（通用 mcpServers 格式适用于 Claude Code / Cursor），重启客户端会话即自动连接。修改端口或重新生成 Token 后需同步更新此配置。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

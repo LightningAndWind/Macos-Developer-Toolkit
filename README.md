@@ -158,7 +158,7 @@ cd devkit-web && node server.js
 
 内置一个 MCP（Model Context Protocol）服务器，让 ZCode / Claude Code / Cursor 等大模型客户端直接使用 devkit 已保存的服务器连接与 Git 密钥执行任务，而 **IP、用户名、密码、密钥路径永远不会进入模型上下文**。默认关闭，在「设置 → AI 接入」中启用。
 
-- **形态**：Streamable HTTP 传输，仅绑定 `127.0.0.1:51790`（可改），Bearer Token 鉴权；协议层与 HTTP 层均为手写最小实现（零新依赖）
+- **形态**：Streamable HTTP 传输，仅绑定 `127.0.0.1:51790`（可改），Bearer Token 鉴权；客户端经 **stdio 桥接脚本**接入（启用时自动生成到 `~/Library/Application Support/devkit/mcp-stdio-bridge.sh`，客户端配置只需 command + args，无需手工配端口与请求头）；协议层与 HTTP 层均为手写最小实现（零新依赖）
 - **工具（10 个）**：SSH 4 个（`ssh_list_servers` / `ssh_open_session` / `ssh_exec` / `ssh_close_session`）、Git 3 个（`git_list_repos` / `git_status` / `git_run`）、数据库 3 个（`db_list_connections` / `db_query` / `db_command`）——模型只见「服务器 / 仓库 / 连接」的别名，凭据在 app 进程内部取用
 - **远程执行**：无 pty shell + 标记协议，密码认证走进程内 NIOSSH、私钥认证走系统 `/usr/bin/ssh`（与终端工具双引擎约定一致）；支持跨命令保持 cd / 环境变量的持久会话（空闲 30 分钟回收），也支持一次性执行；默认 30 秒超时、单流输出 512KB 截断
 - **数据库执行**：MySQL 走 mysql-nio、Redis 手写 RESP2 客户端；连接配置的密码与默认库自动应用（AUTH / SELECT）
@@ -219,3 +219,15 @@ hdiutil create -volname "devkit" -srcfolder build/dmg-staging -ov -format UDZO b
 <img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/f44063d4-f034-4aa2-a2f3-103a071a7180" />
 <img width="1109" height="618" alt="image" src="https://github.com/user-attachments/assets/2bfb5935-3f7c-44d7-9fb9-788e7a52108d" />
 
+
+## 更新记录
+
+### 2026-10-25
+
+- **新增「数据库」工具**：连接 MySQL / Redis，命令行式执行 SQL 与命令。MySQL 走 mysql-nio 直连（无需本机客户端），Redis 手写 RESP2 协议（零新依赖）；连接登记存 SQLite，类型切换端口联动（3306 / 6379）；结果按 TSV（MySQL）与 redis-cli 风格（Redis）渲染，支持多语句 / 多命令、超时与输出截断
+- **新增「AI 接入（MCP）」**：app 内置 MCP 服务器（本地 HTTP 服务，仅绑定 127.0.0.1 + Bearer Token，默认关闭），大模型客户端（ZCode / Claude Code / Cursor 等）经 **stdio 桥接脚本**（启用时自动生成）直连使用 devkit 已保存的服务器连接、Git 密钥与数据库连接。客户端配置为 stdio 形式（command 指向桥接脚本，端口与 Token 走 args）。对外暴露 10 个工具：
+  - SSH：`ssh_list_servers` / `ssh_open_session` / `ssh_exec` / `ssh_close_session`（持久会话可跨命令保持 cd 与环境变量，空闲 30 分钟自动回收）
+  - Git：`git_list_repos` / `git_status` / `git_run`（绑定密钥的仓库自动注入认证）
+  - 数据库：`db_list_connections` / `db_query` / `db_command`
+- **凭据零暴露**：模型只见「服务器 / 仓库 / 连接」的别名与 ID（**别名原样返回、不参与脱敏**，保证模型按名引用与实际记录一致；若不想让模型看到某信息，请不要写进别名）；IP、用户名、密码、密钥路径永不进入模型上下文，所有出站文本（结果 / 错误 / 审计）经脱敏层擦除为 `[REDACTED]`。设置页提供 Token 管理、客户端配置一键复制、AI 使用提示词（可粘贴进 AGENTS.md）与最近 200 次调用审计
+- 远程执行双引擎与终端工具一致（密码认证走进程内 NIOSSH，私钥认证走系统 `/usr/bin/ssh`）；密码引擎沿用 TOFU 约定（主机需先在 SSH 终端连接过一次）
