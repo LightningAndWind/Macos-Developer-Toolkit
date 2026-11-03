@@ -65,6 +65,14 @@ struct TabItemView: View {
             }
         }
         .onHover { isHovering = $0 }
+        // 重命名输入框失焦（点了别处 / 切了窗口）即提交退出：
+        // 否则 isEditingTitle 永久为 true，行内一直渲染 TextField——
+        // 悬停显示 I 型光标，且行手势被 guard 吞掉，标签再也点不回来。
+        .onChange(of: titleFieldFocused) { _, focused in
+            if !focused, isEditingTitle {
+                commitRename()
+            }
+        }
         .animation(Theme.Motion.micro, value: isSelected)
         .animation(Theme.Motion.micro, value: isHovering)
         .contextMenu { menu }
@@ -152,6 +160,10 @@ struct TabItemView: View {
                 .textFieldStyle(.plain)
                 .font(Theme.Fonts.tabTitle)
                 .focused($titleFieldFocused)
+                .onKeyPress(.escape) {
+                    cancelRename()
+                    return .handled
+                }
                 .onSubmit(commitRename)
         } else {
             FadingTitleText(text: tab.displayTitle + (tab.hasUnsavedChanges ? "  *" : ""))
@@ -232,6 +244,11 @@ struct TabItemView: View {
 
     private func commitRename() {
         appState.renameHTTP(tabID: tab.id, newTitle: draftTitle)
+        isEditingTitle = false
+    }
+
+    /// 取消重命名：丢弃草稿，恢复原标题。
+    private func cancelRename() {
         isEditingTitle = false
     }
 

@@ -74,7 +74,8 @@ struct SSHToolView: View {
                 terminalSurface(SSHTerminalContainer(client: tool.client, scrollModel: terminalScroll)
                     .terminalScrollIndicator(terminalScroll))
             } else {
-                terminalSurface(SSHTerminalPlaceholder(state: tool.client.state))
+                terminalSurface(SSHTerminalPlaceholder(state: tool.client.state,
+                                                       attempt: tool.client.connectAttempt))
             }
         }
     }
@@ -119,16 +120,18 @@ struct SSHToolView: View {
     }
 }
 
-/// 密码引擎未连接时终端区域的占位（连接中 / 失败 / 断开）。
+/// 密码引擎未连接时终端区域的占位（连接中 / 失败 / 断开）。`attempt` > 1 表示瞬时不可达自动重试中。
 private struct SSHTerminalPlaceholder: View {
     let state: SSHConnectionState
+    var attempt: Int = 0
 
     var body: some View {
         VStack(spacing: 10) {
             switch state {
             case .connecting:
                 ProgressView().controlSize(.small)
-                Text("正在连接…").foregroundStyle(.secondary)
+                Text(attempt > 1 ? "网络暂不可达，自动重试中（第 \(attempt) 次）…" : "正在连接…")
+                    .foregroundStyle(.secondary)
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 26))

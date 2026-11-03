@@ -24,6 +24,9 @@ final class SSHClient {
 
     private(set) var state: SSHConnectionState = .idle
 
+    /// 当前连接尝试轮次（TCP 瞬时不可达自动重试时递增；>1 表示正在重试，视图据此提示）。
+    private(set) var connectAttempt = 0
+
     /// 首连信任询问回调（TOFU，host:port 维度）。返回 true 表示信任并继续。
     var trustHandler: ((String, Int) async -> Bool)?
 
@@ -110,7 +113,9 @@ final class SSHClient {
                 }
                 .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
 
-            let conn = try await bootstrap.connect(host: profile.host, port: profile.port).get()
+            let conn = try await connectWithRetry {
+                try await bootstrap.connect(host: profile.host, port: profile.port).get()
+            }
             nio.connectionChannel = conn
 
             // 本次连接专属的关闭信号；onClose 直接捕获它（AsyncSignal 是 Sendable），
@@ -134,10 +139,67 @@ final class SSHClient {
             }
 
             watchClose(signal)
+        } catch let error as NIOConnectionError {
+            teardownChannels()
+            // 用户在连接（含自动重试等待）期间主动断开：保留「已断开」，不覆盖成「连接失败」。
+            if case .disconnected = state { return }
+            let reason = Self.describeConnectError(error)
+            state = .failed(connectAttempt > 1 ? "\(reason)（已自动重试 \(connectAttempt) 次）" : reason)
         } catch {
             teardownChannels()
+            if case .disconnected = state { return }
             state = .failed(error.localizedDescription)
         }
+    }
+
+    // MARK: - 连接自动重试
+
+    /// TCP 连接瞬时不可达时的自动重试间隔（累计约 15 秒窗口）。
+    ///
+    /// 背景：长时间空闲断开后（VPN / 路由尚未就绪），首次 connect 常被内核立即拒绝
+    /// （ENETUNREACH / EHOSTUNREACH），几秒后自愈——过去表现为「第一次点重连失败，
+    /// 第二次点才成功」。现在在同一个点击里自动多重试一会儿，替代用户的第二次点击。
+    /// （与数据库工具 connectMySQL / RedisSession.connect 的同源重试语义一致。）
+    private static let connectRetryDelays: [TimeInterval] = [1.0, 2.0, 3.0, 4.0, 5.0]
+
+    /// 带自动重试的 TCP 连接：仅对「瞬时不可达 / DNS 瞬败」重试，其余错误照常上抛。
+    private func connectWithRetry(_ connect: () async throws -> Channel) async throws -> Channel {
+        var delays = Self.connectRetryDelays
+        connectAttempt = 0
+        while true {
+            connectAttempt += 1
+            do {
+                return try await connect()
+            } catch let error as NIOConnectionError {
+                // 重试窗口未用尽 + 瞬时不可达 + 用户未中途断开（状态仍是 connecting）→ 稍候重试。
+                guard !delays.isEmpty, Self.isTransientUnreachable(error), case .connecting = state else {
+                    throw error
+                }
+                try? await Task.sleep(nanoseconds: UInt64(delays.removeFirst() * 1_000_000_000))
+            }
+        }
+    }
+
+    /// 连接错误是否值得自动重试（瞬时不可达 / DNS 瞬败，通常几秒内自愈）。
+    ///
+    /// ECONNREFUSED（端口未开）重试无意义；ETIMEDOUT 要等内核 SYN 超时（约 75s）才出现，
+    /// 重试会把单次挂起放大成数倍时长——均不重试。
+    private static func isTransientUnreachable(_ error: NIOConnectionError) -> Bool {
+        // 网络栈刚恢复时首个 DNS 查询也可能瞬败（如 mDNSResponder 未就绪），一并重试。
+        if error.dnsAError != nil || error.dnsAAAAError != nil { return true }
+        return error.connectionErrors.contains { failure in
+            guard let code = (failure.error as? IOError)?.errnoCode else { return false }
+            return code == EHOSTUNREACH || code == ENETUNREACH
+        }
+    }
+
+    /// NIOConnectionError → 可读文案：它桥接成 NSError 后 localizedDescription 只有
+    /// "NIOPosix.NIOConnectionError error 1" 这类晦涩文本，用户无从判断原因。
+    /// 翻译逻辑与 `NIOSSHExecTransport.launch` 的同款处理一致。
+    private static func describeConnectError(_ error: NIOConnectionError) -> String {
+        if error.dnsAError != nil || error.dnsAAAAError != nil { return "域名解析失败" }
+        let refused = error.connectionErrors.contains { ($0.error as? IOError)?.errnoCode == ECONNREFUSED }
+        return refused ? "连接被拒绝（目标端口未开放）" : "无法建立 TCP 连接（网络不可达或超时）"
     }
 
     /// 用户断开或标签关闭时调用。

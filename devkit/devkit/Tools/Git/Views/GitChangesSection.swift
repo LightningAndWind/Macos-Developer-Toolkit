@@ -13,6 +13,7 @@ struct GitChangesSection: View {
     @Bindable var tool: GitTool
     @State private var message = ""
     @State private var amend = false
+    @State private var confirmDiscardAll = false
     /// 文件列表宽度（可拖拽，持久化）；预览区占据其余全部宽度，保证编辑区足够大。
     /// UserDefaults 存 Double，使用时桥接为 CGFloat（与侧栏宽度同模式）。
     @AppStorage("git.changes.listWidth") private var storedListWidth: Double = 240
@@ -34,6 +35,10 @@ struct GitChangesSection: View {
                     .disabled(tool.isBusy)
                 Button("全部取消") { Task { await tool.unstageAll() } }
                     .disabled(tool.isBusy)
+                Button("放弃全部") { confirmDiscardAll = true }
+                    .foregroundStyle(.red)
+                    .disabled(tool.isBusy || tool.status.entries.isEmpty)
+                    .help("把暂存区与工作区全部还原到最近一次提交")
             }
             .padding(.horizontal, 4).padding(.vertical, 6)
 
@@ -77,6 +82,18 @@ struct GitChangesSection: View {
 
             Divider()
             commitBar
+        }
+        .confirmationDialog("放弃所有未提交修改？", isPresented: $confirmDiscardAll,
+                            titleVisibility: .visible) {
+            Button("放弃修改（保留未跟踪文件）", role: .destructive) {
+                Task { await tool.discardAll(includeUntracked: false) }
+            }
+            Button("放弃修改并删除未跟踪文件", role: .destructive) {
+                Task { await tool.discardAll(includeUntracked: true) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("已暂存与未暂存的改动将不可恢复地还原到最近一次提交")
         }
     }
 
@@ -154,6 +171,9 @@ struct GitChangesSection: View {
             switch kind {
             case .staged:
                 Button("取消暂存") { Task { await tool.unstage(paths: [entry.path]) } }
+                Button("丢弃") { Task { await tool.discardStaged(paths: [entry.path]) } }
+                    .foregroundStyle(.red)
+                    .help("恢复到最近一次提交的版本；新增文件只取消暂存、内容保留")
             case .unstaged:
                 Button("暂存") { Task { await tool.stage(paths: [entry.path]) } }
                 Button("丢弃") { Task { await tool.discard(paths: [entry.path]) } }

@@ -357,6 +357,41 @@ struct GitRepository {
         try await require(["restore", "--"] + paths)
     }
 
+    // MARK: - 放弃修改
+
+    /// 是否已有可回退的提交（空仓库无 HEAD）。
+    private func hasHeadCommit() async -> Bool {
+        (try? await run(["rev-parse", "--verify", "-q", "HEAD"]))?.succeeded == true
+    }
+
+    /// 放弃全部未提交修改：暂存区与工作区一并回到 HEAD（merge 冲突状态也随之清除）。
+    /// `includeUntracked` 时顺带删除未跟踪文件/目录（`clean -fd`，不带 -x 以保留被忽略的构建产物）。
+    /// 空仓库（无 HEAD）退化为只清空暂存区，文件原样保留。
+    func discardAll(includeUntracked: Bool) async throws {
+        if await hasHeadCommit() {
+            try await require(["reset", "--hard", "HEAD"])
+        } else {
+            try await require(["read-tree", "--empty"])
+        }
+        if includeUntracked { try await require(["clean", "-f", "-d"]) }
+    }
+
+    /// 把指定路径完整恢复到 HEAD（暂存与工作区一并还原）。
+    /// 已暂存的新增文件（HEAD 中不存在）只取消暂存、内容保留转未跟踪，避免误删用户新建文件；
+    /// 空仓库同样退化为仅取消暂存。
+    func discardStaged(paths: [String]) async throws {
+        guard !paths.isEmpty else { return }
+        guard await hasHeadCommit() else {
+            try await require(["rm", "-r", "-q", "--cached", "--"] + paths)
+            return
+        }
+        try await require(["reset", "-q", "HEAD", "--"] + paths)
+        // reset 后新增文件已转未跟踪（不在 ls-files 输出中），仅还原仍被跟踪的文件工作区。
+        let tracked = try await run(["ls-files", "-z", "--"] + paths)
+        let stillTracked = tracked.stdout.split(separator: "\0").map(String.init).filter { !$0.isEmpty }
+        if !stillTracked.isEmpty { try await require(["restore", "--"] + stillTracked) }
+    }
+
     func commit(message: String, amend: Bool = false, stageAll: Bool = false) async throws {
         var args = ["commit", "-m", message]
         if amend { args.append("--amend") }

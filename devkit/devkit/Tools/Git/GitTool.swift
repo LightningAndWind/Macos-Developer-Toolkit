@@ -370,6 +370,23 @@ final class GitTool: DevkitTool {
     func unstage(paths: [String]) async { await perform { try await $0.unstage(paths: paths) } }
     func unstageAll() async { await perform { try await $0.unstageAll() } }
     func discard(paths: [String]) async { await perform { try await $0.discard(paths: paths) } }
+
+    /// 放弃全部未提交修改（暂存 + 工作区，可选连未跟踪文件一并删除）。
+    /// 变基进行中拒绝执行：reset --hard 不会清理 rebase 状态目录，会造成半途状态，应先中止变基。
+    func discardAll(includeUntracked: Bool) async {
+        guard !status.isRebasing else {
+            showToast("变基进行中，请先在分支区中止变基再放弃修改", warning: true)
+            return
+        }
+        await perform(
+            { try await $0.discardAll(includeUntracked: includeUntracked) },
+            success: includeUntracked ? "已放弃所有修改并清理未跟踪文件" : "已放弃所有未提交修改")
+    }
+
+    /// 放弃已暂存文件的修改：完整恢复到 HEAD；新增文件只取消暂存、内容保留。
+    func discardStaged(paths: [String]) async {
+        await perform { try await $0.discardStaged(paths: paths) }
+    }
     func commit(message: String, amend: Bool) async {
         await perform({ try await $0.commit(message: message, amend: amend) }, success: "已提交")
     }

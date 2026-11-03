@@ -222,6 +222,10 @@ hdiutil create -volname "devkit" -srcfolder build/dmg-staging -ov -format UDZO b
 
 ## 更新记录
 
+### 2026-11-02
+
+- **Git 变更区新增「放弃修改」**：顶部「放弃全部」按钮一键把暂存区与工作区还原到最近一次提交（`reset --hard HEAD` + 可选 `clean -fd` 清理未跟踪文件，确认弹窗双选项；merge 冲突状态随之清除，变基进行中会引导先中止变基；空仓库只清空暂存区）；「未提交（已暂存）」分组新增按文件「丢弃」，完整恢复到 HEAD 版本，新增文件只取消暂存、内容保留转未跟踪
+
 ### 2026-10-25
 
 - **新增「数据库」工具**：连接 MySQL / Redis，命令行式执行 SQL 与命令。MySQL 走 mysql-nio 直连（无需本机客户端），Redis 手写 RESP2 协议（零新依赖）；连接登记存 SQLite，类型切换端口联动（3306 / 6379）；结果按 TSV（MySQL）与 redis-cli 风格（Redis）渲染，支持多语句 / 多命令、超时与输出截断
