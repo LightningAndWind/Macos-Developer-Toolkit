@@ -102,9 +102,9 @@ struct GroupChipView: View {
 
     private func renameGroup() {
         let alert = NSAlert()
-        alert.messageText = "重命名分组"
-        alert.addButton(withTitle: "确定")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L("重命名分组")
+        alert.addButton(withTitle: L("确定"))
+        alert.addButton(withTitle: L("取消"))
         let field = NSTextField(string: group.name)
         field.frame.size.width += 80
         alert.accessoryView = field

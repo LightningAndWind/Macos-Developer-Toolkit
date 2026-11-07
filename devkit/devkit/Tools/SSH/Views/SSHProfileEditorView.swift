@@ -54,7 +54,7 @@ struct SSHProfileEditorView: View {
                 }
 
                 TextField("名称", text: $draft.name,
-                          prompt: Text(draft.isLocal ? "例如 前端项目" : "例如 生产服务器"))
+                          prompt: Text(draft.isLocal ? L("例如 前端项目") : L("例如 生产服务器")))
 
                 if draft.isLocal {
                     localSection
@@ -65,7 +65,7 @@ struct SSHProfileEditorView: View {
             .formStyle(.grouped)
 
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L(errorMessage)).font(.caption).foregroundStyle(.red)
             }
 
             HStack {
@@ -73,7 +73,7 @@ struct SSHProfileEditorView: View {
                 Spacer()
                 Button("保存") { save(connect: false) }
                     .keyboardShortcut(.return, modifiers: [])
-                Button(draft.isLocal ? "保存并打开" : "保存并连接") { save(connect: true) }
+                Button(draft.isLocal ? L("保存并打开") : L("保存并连接")) { save(connect: true) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
             }
@@ -82,13 +82,13 @@ struct SSHProfileEditorView: View {
         .frame(width: 420)
         .onAppear {
             if let forcedKind { draft.kind = forcedKind }
-            keyDisplay = draft.privateKeyFileName != nil ? "已配置私钥" : "未选择"
+            keyDisplay = draft.privateKeyFileName != nil ? L("已配置私钥") : L("未选择")
         }
     }
 
     private var title: String {
-        if isNew { return "新建记录" }
-        return draft.isLocal ? "编辑本地终端" : "编辑 SSH 连接"
+        if isNew { return L("新建记录") }
+        return draft.isLocal ? L("编辑本地终端") : L("编辑 SSH 连接")
     }
 
     // MARK: - 分区
@@ -118,7 +118,7 @@ struct SSHProfileEditorView: View {
         TextField("用户名", text: $draft.username)
 
         Picker("认证方式", selection: $draft.authKind) {
-            ForEach(SSHAuthKind.allCases, id: \.self) { Text($0.label).tag($0) }
+            ForEach(SSHAuthKind.allCases, id: \.self) { Text(L($0.label)).tag($0) }
         }
         .pickerStyle(.segmented)
 
@@ -165,7 +165,7 @@ struct SSHProfileEditorView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.prompt = "选择私钥"
+        panel.prompt = L("选择私钥")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         pendingKeyURL = url
         keyDisplay = url.lastPathComponent
@@ -177,7 +177,7 @@ struct SSHProfileEditorView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "选择目录"
+        panel.prompt = L("选择目录")
         if let current = draft.normalizedWorkingDirectory {
             panel.directoryURL = URL(fileURLWithPath: current, isDirectory: true)
         }
@@ -195,7 +195,7 @@ struct SSHProfileEditorView: View {
             if draft.isLocal {
                 // 本地记录用目录名兜底，避免出现一堆「未命名」。
                 let last = draft.normalizedWorkingDirectory.map { ($0 as NSString).lastPathComponent }
-                draft.name = (last?.isEmpty == false ? last! : "本地终端")
+                draft.name = (last?.isEmpty == false ? last! : L("本地终端"))
             } else {
                 draft.name = draft.host
             }
@@ -218,7 +218,7 @@ struct SSHProfileEditorView: View {
                 let name = try SSHKeyStorage.copyIn(from: source, profileID: draft.id)
                 draft.privateKeyFileName = name
             } catch {
-                errorMessage = "复制私钥失败：\(error.localizedDescription)"
+                errorMessage = String(format: L("复制私钥失败：%@"), String(error.localizedDescription))
                 return
             }
             pendingKeyURL = nil
@@ -237,7 +237,7 @@ struct SSHProfileEditorView: View {
             dismiss()
             onSaved(draft, connect)
         } catch {
-            errorMessage = "保存失败：\(error.localizedDescription)"
+            errorMessage = String(format: L("保存失败：%@"), String(error.localizedDescription))
         }
     }
 }

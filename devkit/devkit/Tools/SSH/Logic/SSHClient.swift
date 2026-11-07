@@ -144,7 +144,7 @@ final class SSHClient {
             // 用户在连接（含自动重试等待）期间主动断开：保留「已断开」，不覆盖成「连接失败」。
             if case .disconnected = state { return }
             let reason = Self.describeConnectError(error)
-            state = .failed(connectAttempt > 1 ? "\(reason)（已自动重试 \(connectAttempt) 次）" : reason)
+            state = .failed(connectAttempt > 1 ? String(format: L("%@（已自动重试 %@ 次）"), String(reason), String(connectAttempt)) : reason)
         } catch {
             teardownChannels()
             if case .disconnected = state { return }

@@ -75,7 +75,7 @@ nonisolated final class MCPHTTPListener: @unchecked Sendable {
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1",
                                                                port: NWEndpoint.Port(rawValue: port) ?? 51790)
         guard let listener = try? NWListener(using: parameters) else {
-            onState(false, "无法创建监听器（端口 \(port)）")
+            onState(false, String(format: L("无法创建监听器（端口 %@）"), String(port)))
             return
         }
         self.listener = listener

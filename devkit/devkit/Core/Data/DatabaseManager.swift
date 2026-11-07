@@ -164,8 +164,18 @@ final class DatabaseManager: @unchecked Sendable {
             updated_at REAL NOT NULL,
             conn_json BLOB NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS terminal_notes(
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
         """
         try _execLocked(sql)
+        // terminal_notes 的分类列（按 SSH 记录归类）：旧表没有 profile_id，补列。
+        // 已存在该列时 ALTER 报错，try? 忽略即可（幂等）。
+        try? _execLocked("ALTER TABLE terminal_notes ADD COLUMN profile_id TEXT;")
     }
 
     private func _closeLocked() {
@@ -261,10 +271,10 @@ final class DatabaseManager: @unchecked Sendable {
         var errorDescription: String? {
             switch self {
             case .notOpen: return "数据库未打开"
-            case .openFailed(let m): return "数据库打开失败：\(m)"
-            case .execFailed(let m): return "SQL 执行失败：\(m)"
-            case .prepareFailed(let m): return "SQL 预编译失败：\(m)"
-            case .stepFailed(let m): return "SQL 步进失败：\(m)"
+            case .openFailed(let m): return String(format: L("数据库打开失败：%@"), String(m))
+            case .execFailed(let m): return String(format: L("SQL 执行失败：%@"), String(m))
+            case .prepareFailed(let m): return String(format: L("SQL 预编译失败：%@"), String(m))
+            case .stepFailed(let m): return String(format: L("SQL 步进失败：%@"), String(m))
             }
         }
     }

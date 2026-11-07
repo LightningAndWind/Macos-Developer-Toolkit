@@ -50,7 +50,7 @@ struct GitToolView: View {
         )) {
             Button("好", role: .cancel) { tool.errorMessage = nil }
         } message: {
-            Text(tool.errorMessage ?? "")
+            Text(tool.errorMessage.map(L) ?? "")
         }
     }
 }
@@ -83,7 +83,7 @@ private struct GitToast: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol).foregroundStyle(color)
-            Text(text).font(.system(size: 12, weight: .medium))
+            Text(L(text)).font(.system(size: 12, weight: .medium))
                 // 长报错摘要限两行，避免胶囊横满整个窗口。
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

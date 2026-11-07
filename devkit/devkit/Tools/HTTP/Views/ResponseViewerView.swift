@@ -96,7 +96,7 @@ struct ResponseViewerView: View {
     private func truncationBanner(_ response: HTTPResponseModel) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "scissors")
-            Text("响应体超过 \(HTTPDisplay.size(HTTPClient.maxBodyBytes)) 上限，已中止接收，仅保留并显示前 \(HTTPDisplay.size(response.sizeBytes))。如需完整内容请用 curl 导出后在终端查看。")
+            Text(String(format: L("响应体超过 %@ 上限，已中止接收，仅保留并显示前 %@。如需完整内容请用 curl 导出后在终端查看。"), HTTPDisplay.size(HTTPClient.maxBodyBytes), HTTPDisplay.size(response.sizeBytes)))
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -235,7 +235,7 @@ struct ResponseViewerView: View {
         ContentUnavailableView(
             "二进制内容",
             systemImage: "doc.zipper",
-            description: Text("响应体无法以文本显示（\(sizeText(response))）。")
+            description: Text(String(format: L("响应体无法以文本显示（%@）。"), sizeText(response)))
         )
     }
 
@@ -270,7 +270,7 @@ struct ResponseViewerView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-            Text(message).font(.callout)
+            Text(L(message)).font(.callout)
             Spacer()
         }
         .foregroundStyle(.red)

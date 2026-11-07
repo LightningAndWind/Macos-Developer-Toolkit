@@ -125,7 +125,7 @@ struct SSHStartupChooser: View {
         guard let targetFolder,
               let name = SSHProfileStore.allFolders().first(where: { $0.id == targetFolder })?.name
         else { return "在根目录新建文件夹…" }
-        return "在「\(name)」下新建…"
+        return String(format: L("在「%@」下新建…"), String(name))
     }
 
     // MARK: - Actions

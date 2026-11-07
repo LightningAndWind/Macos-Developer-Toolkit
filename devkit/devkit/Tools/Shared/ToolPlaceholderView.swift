@@ -21,11 +21,11 @@ struct ToolPlaceholderView: View {
                         .font(.system(size: 32))
                         .foregroundStyle(.tint)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(descriptor.title).font(.title.weight(.semibold))
-                        Text(descriptor.subtitle).font(.callout).foregroundStyle(.secondary)
+                        Text(L(descriptor.title)).font(.title.weight(.semibold))
+                        Text(L(descriptor.subtitle)).font(.callout).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(milestone)
+                    Text(L(milestone))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Capsule().fill(Color.accentColor.opacity(0.15)))
@@ -39,7 +39,7 @@ struct ToolPlaceholderView: View {
                             Image(systemName: "circle.fill")
                                 .font(.system(size: 5))
                                 .foregroundStyle(.secondary)
-                            Text(b).font(.callout)
+                            Text(L(b)).font(.callout)
                         }
                     }
                 }

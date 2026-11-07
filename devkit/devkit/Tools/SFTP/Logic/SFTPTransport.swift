@@ -243,7 +243,7 @@ nonisolated final class SystemSSHTransport: SFTPTransport, @unchecked Sendable {
             out.readabilityHandler = nil
             err.readabilityHandler = nil
             throw SFTPError.serverError(code: 255,
-                                        message: "无法启动系统 ssh：\(error.localizedDescription)")
+                                        message: String(format: L("无法启动系统 ssh：%@"), String(error.localizedDescription)))
         }
 
         lock.lock()

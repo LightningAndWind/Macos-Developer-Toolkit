@@ -15,6 +15,8 @@ import SwiftTerm
 struct RemoteSSHContainer: NSViewRepresentable {
     let profile: SSHProfile
     let scrollModel: TerminalScrollModel
+    /// 记事本等外部功能的输入注入口：登记本容器终端，销毁时解绑。
+    var inputHub: TerminalInputHub?
     /// 观察外观：明暗切换时刷新终端配色。
     @Environment(\.colorScheme) private var colorScheme
 
@@ -27,6 +29,9 @@ struct RemoteSSHContainer: NSViewRepresentable {
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
+        // dismantleNSView 是 static，拿不到实例属性；hub 一并寄存在 coordinator 里供其解绑。
+        context.coordinator.inputHub = inputHub
+        inputHub?.bind(view)
         if !context.coordinator.didStart {
             context.coordinator.didStart = true
             let (exe, args) = Self.sshInvocation(for: profile)
@@ -42,6 +47,7 @@ struct RemoteSSHContainer: NSViewRepresentable {
 
     /// 视图销毁时结束 ssh 进程（关标签 / 断开 / 重连换身份都会走到这里）。
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
+        coordinator.inputHub?.unbind(nsView)
         nsView.terminate()
         coordinator.scrollMonitor?.stop()
         coordinator.scrollMonitor = nil
@@ -71,6 +77,8 @@ struct RemoteSSHContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var didStart = false
+        /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
+        var inputHub: TerminalInputHub?
         var scrollMonitor: TerminalScrollerMonitor?
 
         /// scroller 可能尚未创建；未就绪时下一轮主循环重试一次。

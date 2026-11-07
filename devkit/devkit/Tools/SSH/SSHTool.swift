@@ -46,6 +46,9 @@ final class SSHTool: DevkitTool {
     /// 密码会话传输对象（其 `state` 由 SSHClient 自身 @Observable 追踪，视图直接观察）。
     @ObservationIgnored let client = SSHClient()
 
+    /// 终端输入注入口：各终端容器 makeNSView 时登记视图，记事本「执行」经此向会话键入文本。
+    @ObservationIgnored let terminalInput = TerminalInputHub()
+
     /// 待用户确认信任的新主机（TOFU，仅密码引擎用到）。
     var pendingTrust: TrustRequest?
 

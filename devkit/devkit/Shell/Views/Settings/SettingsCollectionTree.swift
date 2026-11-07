@@ -202,13 +202,13 @@ private struct SettingsTreeRow: View {
             if canEdit {
                 iconButton(symbol: "pencil",
                            tint: .secondary,
-                           help: "编辑该记录（名称 / 目录 / 主机等）") {
+                           help: L("编辑该记录（名称 / 目录 / 主机等）")) {
                     onEditRecord?(node)
                 }
             }
             iconButton(symbol: "trash",
                        tint: isHovering ? Color.red.opacity(0.85) : Color.secondary,
-                       help: isFolder ? "删除该文件夹及其全部内容" : "删除该记录") {
+                       help: isFolder ? L("删除该文件夹及其全部内容") : L("删除该记录")) {
                 isFolder ? onDeleteFolder(node) : onDeleteRecord(node)
             }
         }

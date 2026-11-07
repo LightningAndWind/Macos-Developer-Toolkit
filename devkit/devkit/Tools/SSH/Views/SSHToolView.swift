@@ -5,6 +5,8 @@
 //  M4：SSH 工具根视图 —— 呈现终端区（本地 / 远程 / 未选择）。
 //  远程按认证方式分引擎：私钥 → RemoteSSHContainer（系统 ssh）；密码 → SSHTerminalContainer（NIOSSH 自动登录）。
 //  连接的「新建 / 选择已有」走 HTTP 式弹窗（SSHStartupChooser）。
+//  右缘竖向工具条（SSHSideStripView，类 IDE stripe）承载记事本等侧边功能开关；
+//  记事本面板悬浮叠在终端右缘之上（不挤占终端内容区）；工具条常驻布局列不遮挡内容。
 //
 
 import SwiftUI
@@ -12,24 +14,77 @@ import SwiftUI
 struct SSHToolView: View {
     @Bindable var tool: SSHTool
     @Environment(AppState.self) private var appState
-    /// 驱动面板 tint 随明暗变化：与终端 ANSI 色板同一外观基准，保证内边距环与终端区同色。
-    @Environment(\.colorScheme) private var colorScheme
     /// 终端自绘滚动指示条的共享模型（由各终端容器的 NSScroller 监听器更新）。
     @State private var terminalScroll = TerminalScrollModel()
+    /// 右侧记事本面板展开态（开关在右缘竖向工具条上）。
+    @State private var showNotepad = false
+    /// 记事本编辑器放大态（面板级：放大时面板整体加宽，状态在此驱动宽度）。
+    @State private var notepadEnlarged = false
+
+    /// 面板完全滑出窗口右缘所需的最小位移（随放大态变化）：
+    /// 面板宽（常规 256 / 放大 420）+ 右侧留白（工具条 34 + 间距 8）+ 内容外边距 10 + 阴影余量。
+    private var notepadExitOffset: CGFloat {
+        let panelWidth = notepadEnlarged
+            ? Theme.Metrics.notepadPanelExpandedWidth
+            : Theme.Metrics.notepadPanelWidth
+        return panelWidth + Theme.Metrics.sideStripWidth
+            + Theme.Metrics.terminalSideGap + Theme.Metrics.terminalContentInset + 16
+    }
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // 外部边距：终端卡片与窗口四边都留白。
-            .padding(Theme.Metrics.terminalContentInset)
-            .onChange(of: tool.remoteRunning) { _, _ in appState.scheduleSessionSave() }
-            .onChange(of: tool.client.state) { _, _ in appState.scheduleSessionSave() }
-            // 密码引擎首次连新主机的 TOFU 信任询问。
-            .sheet(item: $tool.pendingTrust) { request in
-                SSHTrustPromptView(host: request.host, port: request.port) { trusted in
-                    tool.resolveTrust(trusted: trusted)
-                }
+        // 终端区与右缘工具条照常参与布局（工具条仅 34pt 常驻右缘，不遮挡内容）；
+        // 只有记事本面板是悬浮层：展开时覆盖在终端右缘之上，不挤压终端内容区。
+        // 面板用 trailing 内边距让出工具条位置——悬浮但盖住开关就无法收起了。
+        //
+        // 面板必须常驻层级、只用 offset 控制出入画：transition 的移除会重挂视图层级，
+        // 盖在 NSView 终端（平台视图）上时会出现「收回瞬间沉到终端后面再滑走」的层级跳变；
+        // 常驻视图 z 序稳定，两个方向都一致地滑于终端前方（无淡入淡出，滑动手感对称）。
+        ZStack(alignment: .topTrailing) {
+            HStack(alignment: .top, spacing: Theme.Metrics.terminalSideGap) {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                sideStrip
             }
+            TerminalNotePadPanel(inputHub: tool.terminalInput,
+                                 currentProfileID: tool.activeProfile?.id,
+                                 editorEnlarged: notepadEnlarged,
+                                 onToggleEditorEnlarged: {
+                                     withAnimation(Theme.Motion.content) { notepadEnlarged.toggle() }
+                                 })
+                .frame(width: notepadEnlarged
+                       ? Theme.Metrics.notepadPanelExpandedWidth
+                       : Theme.Metrics.notepadPanelWidth)
+                .terminalCardSurface()
+                .padding(.trailing, Theme.Metrics.sideStripWidth + Theme.Metrics.terminalSideGap)
+                .offset(x: showNotepad ? 0 : notepadExitOffset)
+                .allowsHitTesting(showNotepad)
+                .accessibilityHidden(!showNotepad)
+        }
+        .animation(Theme.Motion.content, value: showNotepad)
+        // 放大切换时面板加宽 / 终端收窄的布局变化走同一动画令牌。
+        .animation(Theme.Motion.content, value: notepadEnlarged)
+        // 外部边距：终端卡片与窗口四边都留白。
+        .padding(Theme.Metrics.terminalContentInset)
+        .onChange(of: tool.remoteRunning) { _, _ in appState.scheduleSessionSave() }
+        .onChange(of: tool.client.state) { _, _ in appState.scheduleSessionSave() }
+        // 密码引擎首次连新主机的 TOFU 信任询问。
+        .sheet(item: $tool.pendingTrust) { request in
+            SSHTrustPromptView(host: request.host, port: request.port) { trusted in
+                tool.resolveTrust(trusted: trusted)
+            }
+        }
+    }
+
+    /// 右缘竖向工具条：记事本开关在此；后续新增侧边功能往 items 里加一项即可。
+    private var sideStrip: some View {
+        SSHSideStripView(items: [
+            SSHSideStripItem(id: "notepad",
+                             symbol: "note.text",
+                             help: "记事本",
+                             isActive: showNotepad) {
+                withAnimation(Theme.Motion.content) { showNotepad.toggle() }
+            }
+        ])
     }
 
     @ViewBuilder
@@ -38,7 +93,8 @@ struct SSHToolView: View {
         case .local:
             // `.id(launchID)`：从另一条本地记录打开 / 重开时换 id → 以新目录重建 shell。
             terminalSurface(LocalTerminalContainer(workingDirectory: tool.localWorkingDirectory,
-                                                   scrollModel: terminalScroll)
+                                                   scrollModel: terminalScroll,
+                                                   inputHub: tool.terminalInput)
                 .terminalScrollIndicator(terminalScroll))
                 .id(tool.localLaunchID)
         case .remote:
@@ -62,7 +118,9 @@ struct SSHToolView: View {
         if tool.activeProfile?.authKind == .key {
             // 私钥：外部 ssh 子进程。`.id(launchID)` 让重连换 id → 销毁旧容器（terminate 杀旧 ssh）并新建。
             if tool.remoteRunning, let profile = tool.activeProfile {
-                terminalSurface(RemoteSSHContainer(profile: profile, scrollModel: terminalScroll)
+                terminalSurface(RemoteSSHContainer(profile: profile,
+                                                   scrollModel: terminalScroll,
+                                                   inputHub: tool.terminalInput)
                     .terminalScrollIndicator(terminalScroll))
                     .id(tool.remoteLaunchID)
             } else {
@@ -71,7 +129,9 @@ struct SSHToolView: View {
         } else {
             // 密码：进程内 NIOSSH，已连接显示终端，否则显示连接中/失败/断开占位。
             if case .connected = tool.client.state {
-                terminalSurface(SSHTerminalContainer(client: tool.client, scrollModel: terminalScroll)
+                terminalSurface(SSHTerminalContainer(client: tool.client,
+                                                     scrollModel: terminalScroll,
+                                                     inputHub: tool.terminalInput)
                     .terminalScrollIndicator(terminalScroll))
             } else {
                 terminalSurface(SSHTerminalPlaceholder(state: tool.client.state,
@@ -103,20 +163,7 @@ struct SSHToolView: View {
             // 内边距：终端文字距面板内边留白，不贴边。
             .padding(Theme.Metrics.terminalInnerPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // 终端面板：毛玻璃底 + 随明暗的窗口底色 tint（终端视图自身透明，露出此面板）。
-            .background {
-                ZStack {
-                    terminalPanel.fill(.ultraThinMaterial)
-                    terminalPanel.fill(Color(nsColor: .windowBackgroundColor)
-                        .opacity(colorScheme == .dark ? 0 : 0.2))
-                }
-            }
-            .clipShape(terminalPanel)
-    }
-
-    /// 终端面板形状：四周圆角，半径近似窗口圆角。
-    private var terminalPanel: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Theme.Metrics.terminalCornerRadius, style: .continuous)
+            .terminalCardSurface()
     }
 }
 
@@ -130,7 +177,7 @@ private struct SSHTerminalPlaceholder: View {
             switch state {
             case .connecting:
                 ProgressView().controlSize(.small)
-                Text(attempt > 1 ? "网络暂不可达，自动重试中（第 \(attempt) 次）…" : "正在连接…")
+                Text(attempt > 1 ? String(format: L("网络暂不可达，自动重试中（第 %@ 次）…"), String(attempt)) : "正在连接…")
                     .foregroundStyle(.secondary)
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle")

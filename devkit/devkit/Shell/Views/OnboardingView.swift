@@ -68,7 +68,7 @@ struct OnboardingView: View {
                     directoryPicker
 
                     if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        Label(L(errorMessage), systemImage: "exclamationmark.triangle.fill")
                             .font(.callout)
                             .foregroundStyle(.red)
                             .transition(.opacity)

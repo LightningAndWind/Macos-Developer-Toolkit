@@ -108,7 +108,7 @@ private struct TransferHud: View {
                         Text("\(state.sourceLabel) → \(state.targetLabel)")
                             .font(.callout.weight(.semibold))
                         if !state.isEnumerating {
-                            Text("\(state.completedFiles)/\(state.totalFiles) 个文件")
+                            Text(String(format: L("%@/%@ 个文件"), String(state.completedFiles), String(state.totalFiles)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

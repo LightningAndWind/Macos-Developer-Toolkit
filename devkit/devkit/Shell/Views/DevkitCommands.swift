@@ -22,7 +22,7 @@ struct DevkitCommands: Commands {
 
             // ⌘1 ~ ⌘9 直达标签；⌘0 最后一个
             ForEach(1...9, id: \.self) { idx in
-                Button("跳转到第 \(idx) 个标签") {
+                Button(String(format: L("跳转到第 %@ 个标签"), String(idx))) {
                     appState.tabManager.selectAt(position: idx)
                     appState.saveSession()
                 }
@@ -75,8 +75,8 @@ struct DevkitCommands: Commands {
                 guard let tab = appState.tabManager.selectedTab else { return }
                 let alert = NSAlert()
                 alert.messageText = "重命名标签"
-                alert.addButton(withTitle: "确定")
-                alert.addButton(withTitle: "取消")
+                alert.addButton(withTitle: L("确定"))
+                alert.addButton(withTitle: L("取消"))
                 let tf = NSTextField(string: tab.displayTitle)
                 tf.frame.size.width += 80
                 alert.accessoryView = tf

@@ -16,6 +16,8 @@ import SwiftTerm
 struct SSHTerminalContainer: NSViewRepresentable {
     let client: SSHClient
     let scrollModel: TerminalScrollModel
+    /// 记事本等外部功能的输入注入口：登记本容器终端，销毁时解绑。
+    var inputHub: TerminalInputHub?
     /// 首次可用尺寸回报（用于以合理初始尺寸连接）。
     var onSize: ((Int, Int) -> Void)?
     /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
@@ -31,6 +33,9 @@ struct SSHTerminalContainer: NSViewRepresentable {
         // 与本地 / 系统 ssh 终端一致：隐藏 SwiftTerm 那条常驻白/灰轨道的右侧滚动条。
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
+        // dismantleNSView 是 static，拿不到实例属性；hub 一并寄存在 coordinator 里供其解绑。
+        context.coordinator.inputHub = inputHub
+        inputHub?.bind(view)
         context.coordinator.attach(view)
         return view
     }
@@ -44,6 +49,7 @@ struct SSHTerminalContainer: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: TerminalView, coordinator: Coordinator) {
+        coordinator.inputHub?.unbind(nsView)
         coordinator.stopConsuming()
         coordinator.scrollMonitor?.stop()
         coordinator.scrollMonitor = nil
@@ -52,6 +58,8 @@ struct SSHTerminalContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, TerminalViewDelegate {
         var client: SSHClient
+        /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
+        var inputHub: TerminalInputHub?
         private weak var view: TerminalView?
         private var consumeTask: Task<Void, Never>?
         /// 已订阅的输出流代际（对应 `SSHClient.streamGeneration`）；-1 = 尚未订阅过。

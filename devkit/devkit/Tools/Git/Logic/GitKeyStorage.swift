@@ -160,7 +160,7 @@ enum GitKeyStorage {
             switch self {
             case .noDataDirectory: return "尚未配置数据存储目录"
             case .emptyName: return "密钥名称不能为空"
-            case .generateFailed(let m): return "生成密钥失败：\(m)"
+            case .generateFailed(let m): return String(format: L("生成密钥失败：%@"), String(m))
             }
         }
     }

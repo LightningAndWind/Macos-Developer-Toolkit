@@ -15,6 +15,8 @@ struct LocalTerminalContainer: NSViewRepresentable {
     /// 打开时的工作目录；nil / 空白 / 目录不存在 → 回落到用户个人目录。
     var workingDirectory: String?
     let scrollModel: TerminalScrollModel
+    /// 记事本等外部功能的输入注入口：登记本容器终端，销毁时解绑。
+    var inputHub: TerminalInputHub?
     /// 观察外观：明暗切换时让 SwiftUI 回调 `updateNSView`，据此刷新终端配色。
     @Environment(\.colorScheme) private var colorScheme
 
@@ -27,6 +29,9 @@ struct LocalTerminalContainer: NSViewRepresentable {
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
+        // dismantleNSView 是 static，拿不到实例属性；hub 一并寄存在 coordinator 里供其解绑。
+        context.coordinator.inputHub = inputHub
+        inputHub?.bind(view)
         // 回滚缓冲上限：只保留最近 N 行历史，不会无限累积整会话输出。
         view.changeScrollback(Theme.Metrics.terminalScrollbackLines)
         if !context.coordinator.didStart {
@@ -50,6 +55,7 @@ struct LocalTerminalContainer: NSViewRepresentable {
     /// `terminate()` 内部幂等（子进程已退出时 `childStopped` 只是置位 + 取消监视器），
     /// 与 `SSHTerminalContainer.dismantleNSView` 同一套收尾模式。
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
+        coordinator.inputHub?.unbind(nsView)
         nsView.terminate()
         coordinator.scrollMonitor?.stop()
         coordinator.scrollMonitor = nil
@@ -69,6 +75,8 @@ struct LocalTerminalContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var didStart = false
+        /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
+        var inputHub: TerminalInputHub?
         var scrollMonitor: TerminalScrollerMonitor?
 
         /// scroller 可能尚未创建；未就绪时下一轮主循环重试一次。

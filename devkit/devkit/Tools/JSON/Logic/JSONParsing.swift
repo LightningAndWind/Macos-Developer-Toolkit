@@ -40,7 +40,7 @@ struct JSONError: Error, Equatable {
 
     /// "第 X 行 第 Y 列：<message>"，可选追加提示。
     var displayText: String {
-        var text = "第 \(line) 行 第 \(column) 列：\(message)"
+        var text = String(format: L("第 %@ 行 第 %@ 列：%@"), String(line), String(column), String(message))
         if let hint { text += "（\(hint)）" }
         return text
     }
@@ -95,9 +95,9 @@ private struct JSONValueScanner {
         case "f": try expectLiteral("false"); return .bool(false)
         case "n": try expectLiteral("null");  return .null
         case "-", "0"..."9": return try parseNumber()
-        case "'": throw error("字符串必须使用双引号", hint: "把 '\(ch)' 改成 \"…\"")
+        case "'": throw error("字符串必须使用双引号", hint: String(format: L("把 '%@' 改成 \"…\""), String(ch)))
         case "/": throw error("不支持注释", hint: "标准 JSON 不允许 // 或 /* */ 注释，请删除")
-        default: throw error("意外的字符 '\(ch)'", hint: "此处应是一个值")
+        default: throw error(String(format: L("意外的字符 '%@'"), String(ch)), hint: "此处应是一个值")
         }
     }
 
@@ -195,7 +195,7 @@ private struct JSONValueScanner {
                 case "r":  result.append("\r")
                 case "t":  result.append("\t")
                 case "u":  result.append(try parseUnicodeEscape())
-                default: throw error("非法转义字符 '\\\(esc)'")
+                default: throw error(String(format: L("非法转义字符 '\\%@'"), String(esc)))
                 }
             case "\n":
                 throw error("字符串内出现裸换行", hint: "换行应转义为 \\n 或用引号包裹整段")
@@ -246,7 +246,7 @@ private struct JSONValueScanner {
         } else if let p = peek, p.isNumber {
             while let c = peek, c.isNumber { consume() }
         } else {
-            throw error("数字格式非法", hint: "数字不能以 '\(peek ?? "?")' 开头")
+            throw error("数字格式非法", hint: String(format: L("数字不能以 '%@' 开头"), String(peek ?? "?")))
         }
 
         if peek == "." {
@@ -271,7 +271,7 @@ private struct JSONValueScanner {
     mutating func expectLiteral(_ literal: String) throws {
         for expected in literal {
             guard let ch = peek, ch == expected else {
-                throw error("意外的关键字", hint: "是否想写 \(literal)？")
+                throw error("意外的关键字", hint: String(format: L("是否想写 %@？"), String(literal)))
             }
             consume()
         }

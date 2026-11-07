@@ -127,7 +127,7 @@ final class AppState {
         for i in 0..<count {
             guard let d = registry.descriptor(for: ids[i % ids.count]),
                   let tab = tabManager.openTool(descriptor: d) else { continue }
-            tabManager.rename(tabID: tab.id, to: "标签 \(i + 1)")
+            tabManager.rename(tabID: tab.id, to: String(format: L("标签 %@"), String(i + 1)))
             opened.append(tab)
         }
         // 前两个标签归入一个分组，验证分组行与颜色渲染。

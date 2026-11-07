@@ -67,7 +67,7 @@ final class LocalSFTPBackend: SFTPBackend {
                     cont.resume(returning: entries)
                 } catch {
                     cont.resume(throwing: SFTPError.serverError(
-                        code: 3, message: "无法读取 \(dir)：\(error.localizedDescription)"))
+                        code: 3, message: String(format: L("无法读取 %@：%@"), String(dir), String(error.localizedDescription))))
                 }
             }
         }
@@ -124,11 +124,11 @@ final class LocalSFTPBackend: SFTPBackend {
         fm.createFile(atPath: dst, contents: nil)
         let inHandle: FileHandle
         do { inHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: src)) }
-        catch { throw SFTPError.serverError(code: 2, message: "无法读取 \(src)") }
+        catch { throw SFTPError.serverError(code: 2, message: String(format: L("无法读取 %@"), String(src))) }
         defer { try? inHandle.close() }
         let outHandle: FileHandle
         do { outHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: dst)) }
-        catch { throw SFTPError.serverError(code: 3, message: "无法写入 \(dst)") }
+        catch { throw SFTPError.serverError(code: 3, message: String(format: L("无法写入 %@"), String(dst))) }
         defer { try? outHandle.close() }
 
         var done: UInt64 = 0

@@ -48,7 +48,10 @@ enum DebugSelfCheck {
         checkSnapshotDecodesLegacyJSON()
         checkRequestTimeoutCompatibility()
         checkSSHRecordCompatibility()
+        checkTerminalNoteStore()
+        checkLocalizationResolves()
         await checkCommitClosesFilePreview()
+        await checkRemoteManagement()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
@@ -419,6 +422,140 @@ enum DebugSelfCheck {
         expect(tool.fileDiff == nil, "提交后预览内容应一并清空")
     }
 
+    /// 远程管理：添加 / 重名拒绝 / 选定持久化 / push 自动建上游 / 显式远程拉取 / 删除与回落。
+    /// 远程是仓库级配置（与分支无关），这条自检守住「选定跟随仓库」与「删除选定后回落」两条路径。
+    private static func checkRemoteManagement() async {
+        guard let dir = makeScratchRepo() else {
+            expect(false, "应能创建自检用的临时 Git 仓库")
+            return
+        }
+        // 两个本地裸仓库充当远程（路径 URL 即可，不联网）；结束一并清理。
+        let bare1 = dir + "-remote1.git", bare2 = dir + "-remote2.git"
+        defer {
+            for path in [dir, bare1, bare2] { try? FileManager.default.removeItem(atPath: path) }
+        }
+
+        func runGit(_ args: [String], at: String) -> (ok: Bool, out: String) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = args
+            process.currentDirectoryURL = URL(fileURLWithPath: at)
+            let stdout = Pipe()
+            process.standardOutput = stdout
+            process.standardError = Pipe()
+            try? process.run()
+            process.waitUntilExit()
+            let data = stdout.fileHandleForReading.readDataToEndOfFile()
+            return (process.terminationStatus == 0, String(data: data, encoding: .utf8) ?? "")
+        }
+        expect(runGit(["init", "-q", "--bare", bare1], at: dir).ok, "应能创建裸远程 1")
+        expect(runGit(["init", "-q", "--bare", bare2], at: dir).ok, "应能创建裸远程 2")
+
+        let tool = GitTool()
+        tool.select(repo: GitRepo(folderID: nil, alias: "自检仓库", path: dir, keyID: nil))
+        await tool.refreshAll()
+
+        // 添加：两条成功；同名与含空格被就地拒绝且不落库。
+        expect(await tool.addRemote(name: "origin", url: bare1) == nil, "添加 origin 应成功")
+        expect(await tool.addRemote(name: "mirror", url: bare2) == nil, "添加 mirror 应成功")
+        let dup = await tool.addRemote(name: "origin", url: bare2)
+        expect(dup != nil && dup!.contains("已存在"), "同名添加应被拒绝并给出指引（实际：\(dup ?? "nil")）")
+        expect(await tool.addRemote(name: "a b", url: bare2) != nil, "含空格的名称应被拒绝")
+        expect(tool.remotes.map(\.name).sorted() == ["mirror", "origin"],
+               "远程列表应恰为 mirror/origin（实际：\(tool.remotes.map(\.name))）")
+
+        // 选定：立即生效，且持久化到仓库登记（跨分支 / 跨会话一致）。
+        tool.selectRemote(name: "mirror")
+        expect(tool.effectiveRemote?.name == "mirror", "选定后生效远程应为 mirror")
+        expect(GitRepoStore.load(id: tool.selectedRepo!.id)?.preferredRemoteName == "mirror",
+               "选定应持久化到仓库登记（实际：\(GitRepoStore.load(id: tool.selectedRepo!.id)?.preferredRemoteName ?? "nil")）")
+
+        // push：显式远程 + 无上游 → 自动 --set-upstream 推到选定远程的同名分支。
+        await tool.commit(message: "自检提交", amend: false)
+        await tool.push()
+        expect(tool.errorMessage == nil && tool.warningMessage == nil, "push 应成功（报错：\(tool.errorMessage ?? "无") / 警告：\(tool.warningMessage ?? "无")）")
+        expect(!runGit(["for-each-ref", "refs/heads"], at: bare2).out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               "选定远程应收到推送的分支")
+        let upstream = runGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], at: dir).out.trimmingCharacters(in: .whitespacesAndNewlines)
+        expect(upstream.hasPrefix("mirror/"), "push 后应建立指向 mirror 的上游（实际：\(upstream)）")
+
+        // pull：显式远程拉取同名分支，无差异时静默成功。
+        await tool.pull()
+        expect(tool.errorMessage == nil && tool.warningMessage == nil, "pull（显式远程）应成功（报错：\(tool.errorMessage ?? "无") / 警告：\(tool.warningMessage ?? "无")）")
+        expect(!runGit(["for-each-ref", "refs/remotes/mirror"], at: dir).out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               "pull 后应有 mirror 的远程跟踪引用")
+
+        // 删除选定远程：偏好清除并回落 origin 优先；继续删除至空。
+        expect(await tool.removeRemote(name: "mirror") == nil, "删除 mirror 应成功")
+        expect(!tool.remotes.contains { $0.name == "mirror" }, "删除后列表不应再有 mirror")
+        expect(tool.effectiveRemote?.name == "origin", "删除选定远程后应回落 origin（实际：\(tool.effectiveRemote?.name ?? "nil")）")
+        expect(await tool.removeRemote(name: "origin") == nil, "删除 origin 应成功")
+        expect(tool.remotes.isEmpty, "删除后远程列表应为空")
+    }
+
+    /// 终端记事本存储：按 SSH 记录分类的建 / 改 / 删 / 过滤 / 排序完整回路（记事本面板的真实数据源）。
+    ///
+    /// 要害一：面板直接读 `store.notes`（@Observable），任何写入后 `reload()` 漏调都会
+    /// 表现为「操作成功但列表不动」。要害二：列表按 created_at 倒序 —— 新记事必须在顶部，
+    /// 且改名 / 改内容（会更新 updated_at）**不打乱**既有位置。要害三：分类 ——
+    /// `notes(inProfile:)` 只过滤不混淆；记录删除必须级联清掉其记事（否则面板出现空分类）。
+    private static func checkTerminalNoteStore() {
+        let store = TerminalNoteStore.shared
+        store.reload()
+        let baseline = store.notes.count
+
+        // 分类夹具：一条真实 SSH 记录 + 一个不存在的记录 id（未分类用 nil）。
+        let category = SSHProfile(name: "自检分类记录", host: "note.local", username: "root")
+        try? SSHProfileStore.save(category)
+
+        guard let a = store.create(profileID: category.id),
+              let b = store.create(profileID: category.id),
+              let c = store.create(profileID: nil) else {
+            expect(false, "应能连续新建三条记事（两条归记录、一条未分类）")
+            SSHProfileStore.delete(category.id)
+            return
+        }
+        expect(store.notes.count == baseline + 3, "新建三条后列表应多三条")
+        expect(store.notes.first?.id == c.id, "新记事应插入顶部（created_at 倒序，不分分类）")
+
+        // 分类过滤：互不混淆，未分类单独成桶。
+        expect(store.notes(inProfile: category.id).map(\.id) == [b.id, a.id],
+               "记录分类下应恰有两条新记事且新在前")
+        expect(store.notes(inProfile: nil).contains { $0.id == c.id }, "未分类记事应落在 nil 桶")
+        expect(store.notes(inProfile: UUID()).isEmpty, "其他记录的分类应为空")
+
+        store.rename(id: a.id, title: "重启容器")
+        store.updateContent(id: a.id, content: "docker restart web")
+        let renamed = store.notes.first { $0.id == a.id }
+        expect(renamed?.title == "重启容器" && renamed?.content == "docker restart web",
+               "改名与改内容应写穿到列表（reload 漏调会让面板看不到变化）")
+        expect(renamed?.profileID == category.id, "编辑不应丢失分类归属")
+
+        // 排序稳定性：改内容更新了 updated_at，但排序键是 created_at，位置不该动。
+        let orderAfterEdit = store.notes(inProfile: category.id).map(\.id)
+        expect(orderAfterEdit == [b.id, a.id], "编辑后不应打乱既有位置（新记事仍在先建的记事之前）")
+
+        // 空标题展示回落 & 空内容不可执行。
+        expect(b.displayTitle == "未命名记事", "空白标题展示应回落为「未命名记事」")
+        expect(b.executableBody == nil, "空内容记事应不可执行（防止把空行发进终端）")
+        // create() 返回的是旧快照；执行体应从**列表里的最新数据**取。
+        expect(renamed?.executableBody == "docker restart web", "有内容记事应能取出执行体（去首尾空白）")
+
+        // 逐条删除收敛。
+        store.delete(id: a.id)
+        store.delete(id: b.id)
+        store.delete(id: c.id)
+        expect(store.notes.count == baseline, "删除后列表应收敛回基线（含跨面板同步的 reload）")
+
+        // 级联：删除 SSH 记录必须连带删掉该分类下的记事（面板不留空分类）。
+        let orphan = store.create(profileID: category.id)
+        expect(orphan != nil, "应能在记录分类下再建一条记事")
+        SSHProfileStore.delete(category.id)
+        expect(SSHProfileStore.load(id: category.id) == nil, "记录应已删除")
+        expect(store.notes(inProfile: category.id).isEmpty,
+               "删除 SSH 记录应级联删除该分类下的全部记事")
+    }
+
     /// 建一个临时仓库：`a.txt` 已提交后又改动（即变更列表里有一条修改记录）。
     private static func makeScratchRepo() -> String? {
         let dir = NSTemporaryDirectory() + "devkit-selfcheck-git-\(UUID().uuidString)"
@@ -663,6 +800,24 @@ enum DebugSelfCheck {
         if result > 0 { return true }            // 本次调用回收了僵尸
         if result < 0 { return errno == ECHILD } // 已被 SwiftTerm 的监视器回收
         return false                             // 仍存活，继续等
+    }
+
+    /// L() 查表边界回归：用户报过「设置侧栏标题 / AI 接入页文案在英文界面下仍显示中文」——
+    /// 根因是这些文案走了纯 String 通道（Text(变量) / 函数参数）而没过 L()。
+    /// 这里在英文环境下断言代表性 key 能查到译文；zh-Hans 下 L() 返回 key 本身、
+    /// 无法区分「命中」与「回退」，打印 SKIP。
+    private static func checkLocalizationResolves() {
+        let languages = UserDefaults.standard.stringArray(forKey: "AppleLanguages") ?? []
+        guard languages.first?.hasPrefix("en") == true else {
+            print("[selfcheck] （非英文环境，L() 查表检查跳过）")
+            return
+        }
+        expect(L("HTTP 记录") == "HTTP history", "L() 侧栏标题应查到英文译文（实得 \(L("HTTP 记录"))）")
+        expect(L("通用") == "General", "L() 侧栏标题应查到英文译文（实得 \(L("通用"))）")
+        expect(L("端点") == "Endpoint", "L() AI 接入页标签应查到英文译文（实得 \(L("端点"))）")
+        let hint = L("还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。")
+        expect(hint != "还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。",
+               "L() AI 接入页空态提示应查到英文译文（实得 \(hint)）")
     }
 
     // MARK: - 断言

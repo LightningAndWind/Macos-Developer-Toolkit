@@ -15,14 +15,20 @@ struct TabBarView: View {
 
     private var tabManager: TabManager { appState.tabManager }
 
+    /// 侧栏是否收起成图标窄轨（与 AppShellView 共用同一持久化键，@AppStorage 自动同步）。
+    @AppStorage(AppPreferences.sidebarCollapsedKey) private var sidebarCollapsed = false
+
     /// 拖拽协调器：跨行共享的拖拽瞬时状态。
     @State private var drag = TabDragCoordinator()
     /// 各行在侧栏坐标空间中的实时帧（拖拽开始前用于建立布局快照）。
     @State private var liveRowFrames: [UUID: CGRect] = [:]
+    /// 收起/展开按钮的悬停态。
+    @State private var isCollapseHovering = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            collapseRow
             tabList
             SidebarFooterBar()
         }
@@ -36,6 +42,35 @@ struct TabBarView: View {
             .frame(height: Theme.Metrics.sidebarHeaderHeight)
     }
 
+    /// 收起/展开按钮行：不随标签列表滚动。展开时靠右、收起后居中（窄轨顶部），
+    /// 样式与底部设置按钮一致（悬停高亮 + 手指光标）。
+    private var collapseRow: some View {
+        Button(action: toggleCollapsed) {
+            Image(systemName: "sidebar.leading")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isCollapseHovering ? Color.primary : Color.secondary)
+                .frame(width: 24, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isCollapseHovering ? Theme.Palette.hoverOverlay : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isCollapseHovering = $0 }
+        .animation(Theme.Motion.micro, value: isCollapseHovering)
+        .pointingHandOnHover()
+        .help(sidebarCollapsed ? "展开侧栏" : "收起侧栏")
+        .accessibilityLabel(sidebarCollapsed ? "展开侧栏" : "收起侧栏")
+        .frame(maxWidth: .infinity, alignment: sidebarCollapsed ? .center : .trailing)
+        .padding(.horizontal, Theme.Metrics.listPadding)
+        .frame(height: 24)
+    }
+
+    private func toggleCollapsed() {
+        withAnimation(Theme.Motion.content) { sidebarCollapsed.toggle() }
+    }
+
     /// 竖向标签列表：用 `.scrollIndicators(.never)` 彻底移除原生滚动条
     /// （`.hidden` 仅自动隐藏，系统“始终显示”下仍会保留 legacy 白色轨道），
     /// 改用跟随滚动位置的自绘细胶囊指示条。
@@ -43,7 +78,10 @@ struct TabBarView: View {
         ScrollView(.vertical) {
             VStack(spacing: Theme.Metrics.tabGap) {
                 ForEach(tabManager.layoutRows) { row in
-                    tabRowView(row)
+                    // 收起成窄轨时隐藏分组行（分组成员仍按序平铺，分组色由标签行左缘色条体现）。
+                    if !(sidebarCollapsed && isGroupHeader(row)) {
+                        tabRowView(row)
+                    }
                 }
                 NewTabButton()
             }
@@ -77,7 +115,8 @@ struct TabBarView: View {
                 GroupChipView(group: group, members: row.groupMembers)
                     .transition(Theme.Transitions.chip)
             case .tab(let tab):
-                TabItemView(tab: tab, coordinator: drag, liveFrames: liveRowFrames)
+                TabItemView(tab: tab, coordinator: drag, liveFrames: liveRowFrames,
+                           isRail: sidebarCollapsed)
                     // 被拖起时原位留一个淡“残影”占位，浮动预览另行跟随指针。
                     .opacity(drag.draggedID == tab.id ? Theme.Palette.dragGhostOpacity : 1)
                     .transition(Theme.Transitions.tabItem)
@@ -86,6 +125,12 @@ struct TabBarView: View {
         .background(rowFrameReporter(id: row.id))
         .offset(y: offset)
         .animation(Theme.Motion.drag, value: offset)
+    }
+
+    /// 该行是否为分组头（收起态过滤用）。
+    private func isGroupHeader(_ row: TabManager.Row) -> Bool {
+        if case .groupHeader = row.kind { return true }
+        return false
     }
 
     /// 上报单行在侧栏坐标空间中的帧，用于拖拽开始时建立布局快照。

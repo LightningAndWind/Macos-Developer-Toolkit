@@ -294,7 +294,7 @@ final class AIAccessServer {
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
             return true
         } catch {
-            lastError = "生成 stdio 桥接脚本失败：\(error.localizedDescription)"
+            lastError = String(format: L("生成 stdio 桥接脚本失败：%@"), String(error.localizedDescription))
             return false
         }
     }

@@ -66,10 +66,10 @@ enum SSHExecError: LocalizedError {
         switch self {
         case .hostNotTrusted:
             return "该主机尚未在 devkit 中信任：请先在「SSH 终端」工具里连接一次这条记录，确认主机可信后再使用 AI 接入"
-        case .connectFailed(let m): return "连接失败：\(m)"
+        case .connectFailed(let m): return String(format: L("连接失败：%@"), String(m))
         case .connectTimeout: return "连接超时"
         case .keyMissing: return "找不到私钥文件，请在 devkit 中重新选择"
-        case .badWorkingDirectory(let m): return "默认目录不可用：\(m)"
+        case .badWorkingDirectory(let m): return String(format: L("默认目录不可用：%@"), String(m))
         case .sessionNotFound: return "会话不存在（可能已被回收），请重新 ssh_open_session"
         case .sessionClosed: return "会话已关闭（超时或达到存活上限），请重新 ssh_open_session"
         case .sessionLimitReached: return "并发会话数已达上限（8），请先 ssh_close_session 释放"
@@ -432,7 +432,7 @@ nonisolated final class SystemSSHExecTransport: SSHExecTransport, @unchecked Sen
         do {
             try process.run()
         } catch {
-            throw SSHExecError.connectFailed("无法启动系统 ssh：\(error.localizedDescription)")
+            throw SSHExecError.connectFailed(String(format: L("无法启动系统 ssh：%@"), String(error.localizedDescription)))
         }
 
         lock.lock()

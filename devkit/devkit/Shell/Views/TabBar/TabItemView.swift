@@ -16,6 +16,8 @@ struct TabItemView: View {
     let coordinator: TabDragCoordinator
     /// 各行的实时帧快照来源（由 TabBarView 注入）。
     let liveFrames: [UUID: CGRect]
+    /// 侧栏收起成图标窄轨：只显示居中图标（标题走 tooltip，关闭走右键菜单）。
+    var isRail: Bool = false
 
     @State private var isHovering = false
     @State private var isEditingTitle = false
@@ -38,7 +40,7 @@ struct TabItemView: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Metrics.tabInnerSpacing) {
+        HStack(spacing: isRail ? 0 : Theme.Metrics.tabInnerSpacing) {
             if let groupColor {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(groupColor)
@@ -48,18 +50,21 @@ struct TabItemView: View {
                 .font(Theme.Fonts.tabSymbol)
                 .foregroundStyle(.secondary)
                 .frame(width: 14)
-            titleView
+            if !isRail {
+                titleView
+            }
         }
-        .padding(.horizontal, Theme.Metrics.tabHPadding)
+        .padding(.horizontal, isRail ? 0 : Theme.Metrics.tabHPadding)
         .frame(height: Theme.Metrics.tabRowHeight)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: isRail ? .center : .leading)
         .contentShape(Rectangle())
         .background(backgroundShape)
         .overlay(borderStroke)
         // 统一手势作用于行内容；关闭按钮随后叠在其上，独立命中，互不干扰。
         .gesture(rowGesture)
         .overlay(alignment: .trailing) {
-            if isHovering || isSelected {
+            // 窄轨放不下关闭按钮：关闭走右键菜单 / ⌘W。
+            if !isRail && (isHovering || isSelected) {
                 closeButton
                     .padding(.trailing, Theme.Metrics.tabHPadding - 3)
             }

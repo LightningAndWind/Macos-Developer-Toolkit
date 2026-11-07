@@ -65,6 +65,20 @@ struct SettingsView: View {
         )
     }
 
+    /// 界面语言：经 `AppleLanguages` 键生效（重启后系统按此键选择 lproj）。
+    @AppStorage(AppPreferences.languageOverrideKey)
+    private var languageRaw: String = AppLanguageMode.system.rawValue
+
+    /// 语言变更后置位：显示「需重启生效」提示与「立即重启」按钮（本次会话内 UI 语言不变）。
+    @State private var showLanguageRestartHint = false
+
+    private var languageMode: Binding<AppLanguageMode> {
+        Binding(
+            get: { AppLanguageMode(rawValue: languageRaw) ?? .system },
+            set: { languageRaw = $0.rawValue }
+        )
+    }
+
     // 数据快照：打开面板时读一次，增删后就地刷新（面板内数据量小，全量读成本可忽略）。
     @State private var savedRequests: [HTTPSavedRequest] = []
     /// 历史只取轻量摘要（不加载响应体 blob），避免为列几百条历史把大对象读进内存。
@@ -142,7 +156,7 @@ struct SettingsView: View {
             Button("清空", role: .destructive) { clearHistory() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将删除 \(historyTotal) 条历史记录，此操作不可撤销。")
+            Text(String(format: L("将删除 %@ 条历史记录，此操作不可撤销。"), String(historyTotal)))
         }
         .confirmationDialog(
             "重置数据目录？",
@@ -203,7 +217,7 @@ struct SettingsView: View {
                 Image(systemName: item.symbol)
                     .font(.system(size: 12))
                     .frame(width: 16)
-                Text(item.title).font(.system(size: 12.5))
+                Text(L(item.title)).font(.system(size: 12.5))
                 Spacer(minLength: 0)
             }
             .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
@@ -235,7 +249,7 @@ struct SettingsView: View {
     private var httpPane: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                searchField(text: $httpQuery, placeholder: "搜索名称 / URL / 方法")
+                searchField(text: $httpQuery, placeholder: L("搜索名称 / URL / 方法"))
                 Button { newHTTPRequest() } label: {
                     Label("新建请求", systemImage: "plus")
                 }
@@ -264,10 +278,10 @@ struct SettingsView: View {
             }
 
             if savedRequests.isEmpty {
-                emptyHint("还没有已保存的请求。发送前按 ⌘S 可把当前请求存入集合。")
+                emptyHint(L("还没有已保存的请求。发送前按 ⌘S 可把当前请求存入集合。"))
             } else if isSearchingHTTP {
                 if filteredSavedRequests.isEmpty {
-                    emptyHint("没有匹配的请求")
+                    emptyHint(L("没有匹配的请求"))
                 } else {
                     ForEach(filteredSavedRequests) { record in
                         SettingsRecordRow(
@@ -275,7 +289,7 @@ struct SettingsView: View {
                             badgeColor: HTTPDisplay.color(forMethod: record.request.method),
                             title: record.name,
                             subtitle: record.request.urlString,
-                            deleteHelp: "删除该已保存请求",
+                            deleteHelp: L("删除该已保存请求"),
                             onDelete: { pendingDeletion = .savedRequest(id: record.id, name: record.name) }
                         )
                     }
@@ -311,9 +325,9 @@ struct SettingsView: View {
             }
 
             if historyTotal == 0 {
-                emptyHint("暂无历史记录。发送请求后会自动记录在这里。")
+                emptyHint(L("暂无历史记录。发送请求后会自动记录在这里。"))
             } else if filteredHistory.isEmpty {
-                emptyHint("没有匹配的历史记录")
+                emptyHint(L("没有匹配的历史记录"))
             } else {
                 ForEach(filteredHistory) { record in
                     SettingsRecordRow(
@@ -321,12 +335,12 @@ struct SettingsView: View {
                         badgeColor: HTTPDisplay.color(forMethod: record.method),
                         title: record.url,
                         subtitle: "\(HTTPDisplay.historyTimestamp(record.timestamp)) · \(statusText(record))",
-                        deleteHelp: "删除该条历史",
+                        deleteHelp: L("删除该条历史"),
                         onDelete: { deleteHistory(record) }
                     )
                 }
                 if !isSearchingHTTP, historyTotal > historyRecords.count {
-                    Text("仅显示最近 \(historyRecords.count) 条（共 \(historyTotal) 条）。")
+                    Text(String(format: L("仅显示最近 %@ 条（共 %@ 条）。"), String(historyRecords.count), String(historyTotal)))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .padding(.top, 2)
@@ -337,7 +351,7 @@ struct SettingsView: View {
 
     private func statusText(_ record: HTTPHistorySummary) -> String {
         if let code = record.statusCode { return "HTTP \(code)" }
-        return "请求失败"
+        return L("请求失败")
     }
 
     // MARK: - SSH 分区
@@ -345,7 +359,7 @@ struct SettingsView: View {
     private var sshPane: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                searchField(text: $sshQuery, placeholder: "搜索名称 / 主机 / 用户名 / 目录")
+                searchField(text: $sshQuery, placeholder: L("搜索名称 / 主机 / 用户名 / 目录"))
                 Button { newSSHRecord() } label: {
                     Label("新建记录", systemImage: "plus")
                 }
@@ -362,10 +376,10 @@ struct SettingsView: View {
                     }
 
                     if profiles.isEmpty {
-                        emptyHint("还没有保存的终端记录。点「新建记录」添加本地终端或 SSH 连接。")
+                            emptyHint(L("还没有保存的终端记录。点「新建记录」添加本地终端或 SSH 连接。"))
                     } else if isSearchingSSH {
                         if filteredProfiles.isEmpty {
-                            emptyHint("没有匹配的记录")
+                            emptyHint(L("没有匹配的记录"))
                         } else {
                             ForEach(filteredProfiles) { profile in
                                 SettingsRecordRow(
@@ -373,7 +387,7 @@ struct SettingsView: View {
                                     symbolColor: .accentColor,
                                     title: profile.name,
                                     subtitle: "\(profile.displaySummary) · \(folderName(for: profile))",
-                                    deleteHelp: "删除该记录（含其私钥文件）",
+                                    deleteHelp: L("删除该记录（含其私钥文件）"),
                                     onDelete: { pendingDeletion = .sshProfile(id: profile.id, name: profile.name) },
                                     onEdit: { beginEditProfile(profile.id) }
                                 )
@@ -403,7 +417,7 @@ struct SettingsView: View {
     }
 
     private func folderName(for profile: SSHProfile) -> String {
-        guard let id = profile.folderID, let name = folderNames[id] else { return "根目录" }
+        guard let id = profile.folderID, let name = folderNames[id] else { return L("根目录") }
         return name
     }
 
@@ -416,7 +430,8 @@ struct SettingsView: View {
                 Text("外观").font(.system(size: 12, weight: .semibold))
                 Picker("外观模式", selection: appearanceMode) {
                     ForEach(AppAppearanceMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
+                        // title 为中文原文 key，经 L() 查表本地化。
+                        Text(L(mode.title)).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -427,9 +442,41 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // 界面语言：跟随系统 / 简体中文 / English。经 AppleLanguages 生效，重启后全局切换
+            // （SwiftUI Text / L() / NSAlert / 菜单等所有通道一致，无「界面一半中文一半英文」的中间态）。
+            VStack(alignment: .leading, spacing: 6) {
+                Text("语言").font(.system(size: 12, weight: .semibold))
+                Picker("界面语言", selection: languageMode) {
+                    ForEach(AppLanguageMode.allCases) { mode in
+                        // 语言名自标识：「跟随系统」是模式描述走本地化；「简体中文 / English」各语言下显示原文。
+                        Text(mode == .system ? L(mode.title) : mode.title)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: languageRaw) { _, _ in
+                    languageMode.wrappedValue.apply()
+                    showLanguageRestartHint = true
+                }
+                Text("选择界面语言；默认跟随系统。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if showLanguageRestartHint {
+                    HStack(spacing: 8) {
+                        Text("重启应用后生效。")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button("立即重启") { relaunch() }
+                            .controlSize(.small)
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("数据目录").font(.system(size: 12, weight: .semibold))
-                Text(AppPreferences.shared.dataDirectoryURL?.path ?? "未设置")
+                Text(AppPreferences.shared.dataDirectoryURL?.path ?? L("未设置"))
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -553,7 +600,7 @@ struct SettingsView: View {
             }
 
             if gitRepos.isEmpty {
-                emptyHint("还没有登记任何 Git 仓库。打开“Git 管理”工具→选择器→登记 / 克隆。")
+                emptyHint(L("还没有登记任何 Git 仓库。打开“Git 管理”工具→选择器→登记 / 克隆。"))
                 Spacer(minLength: 0)
             } else {
                 ScrollView {
@@ -585,7 +632,7 @@ struct SettingsView: View {
             // 改绑密钥（仅换密钥，与新增仓库不同）。
             Menu {
                 Button { rebindGitKey(repo, to: nil) } label: {
-                    gitKeyLabel("不绑定（系统默认）", checked: repo.keyID == nil)
+                    gitKeyLabel(L("不绑定（系统默认）"), checked: repo.keyID == nil)
                 }
                 if !gitKeys.isEmpty { Divider() }
                 ForEach(gitKeys) { key in
@@ -619,7 +666,7 @@ struct SettingsView: View {
     }
 
     private func currentKeyName(for repo: GitRepo) -> String {
-        guard let keyID = repo.keyID, let key = GitKeyStore.load(id: keyID) else { return "默认密钥" }
+        guard let keyID = repo.keyID, let key = GitKeyStore.load(id: keyID) else { return L("默认密钥") }
         return key.name
     }
 
@@ -698,7 +745,7 @@ struct SettingsView: View {
         _ folders: [(id: UUID, parentID: UUID?, name: String)]
     ) -> [SettingsMoveTarget] {
         let byParent = Dictionary(grouping: folders, by: { $0.parentID })
-        var result: [SettingsMoveTarget] = [SettingsMoveTarget(id: nil, label: "根目录")]
+        var result: [SettingsMoveTarget] = [SettingsMoveTarget(id: nil, label: L("根目录"))]
         func walk(_ parent: UUID?, depth: Int) {
             let kids = (byParent[parent] ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -796,6 +843,31 @@ struct SettingsView: View {
         guard let url = AppPreferences.shared.dataDirectoryURL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
+
+    /// 语言切换后的重启：顺序必须是「旧实例先退干净 → 再拉新实例」。
+    /// 直接 open -n 会先弹出新窗口而旧窗口还在（延迟自杀期间两实例并存，还会抢端口）。
+    ///
+    /// 同步机制用**哨兵文件**而非 kill -0 轮询进程死亡：从 Xcode 调试运行时，退出中的进程
+    /// 可能被 debugserver 长期扣住不回收（kill -9 都无效的 SX 空壳），kill -0 对其始终成功，
+    /// 轮询会永远等不到「死亡」。文件出现即「收尾已毕、端口已释放」，语义精确无歧义。
+    ///
+    /// 退出不走 NSApp.terminate：SwiftUI 生命周期下程序化 terminate 会被其内部
+    /// delegate 链静默取消（实测点击后 App 照常运行、无任何反应）。这里显式执行与
+    /// `AppDelegate.applicationWillTerminate` 相同的收尾后 `exit(0)`，不可被取消。
+    private func relaunch() {
+        let marker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("devkit-relaunch-\(UUID().uuidString).flag").path
+        // 标记出现后再等 0.3s 让进程完全退场，然后拉起新实例（$1 = 应用路径，$2 = 标记文件）。
+        let script = "while [ ! -f \"$2\" ]; do sleep 0.05; done; sleep 0.3; open -n \"$1\"; rm -f \"$2\""
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = ["-c", script, "devkit-relaunch", Bundle.main.bundleURL.path, marker]
+        try? task.run()
+        AppState.shared.saveSession()
+        AIAccessServer.shared.shutdown()   // 端口等资源就此释放
+        try? "".write(toFile: marker, atomically: true, encoding: .utf8)
+        exit(0)
+    }
 }
 
 // MARK: - 待确认的删除
@@ -817,25 +889,25 @@ private enum PendingDeletion: Identifiable {
 
     var title: String {
         switch self {
-        case .savedRequest: return "删除这条已保存的请求？"
-        case .sshProfile: return "删除这条终端记录？"
-        case .gitRepo: return "删除这个仓库登记？"
-        case .httpFolder, .sshFolder: return "删除这个文件夹？"
+        case .savedRequest: return L("删除这条已保存的请求？")
+        case .sshProfile: return L("删除这条终端记录？")
+        case .gitRepo: return L("删除这个仓库登记？")
+        case .httpFolder, .sshFolder: return L("删除这个文件夹？")
         }
     }
 
     var message: String {
         switch self {
         case .savedRequest(_, let n):
-            return "「\(n)」将从集合中移除，此操作不可撤销。"
+            return String(format: L("「%@」将从集合中移除，此操作不可撤销。"), String(n))
         case .sshProfile(_, let n):
-            return "「\(n)」及其私钥文件将被删除，此操作不可撤销。"
+            return String(format: L("「%@」及其私钥文件将被删除，此操作不可撤销。"), String(n))
         case .gitRepo(_, let n):
-            return "仅移除「\(n)」的登记，磁盘上的仓库工作目录与已绑定密钥不会被删除。"
+            return String(format: L("仅移除「%@」的登记，磁盘上的仓库工作目录与已绑定密钥不会被删除。"), String(n))
         case .httpFolder(_, let n):
-            return "「\(n)」及其内部的全部文件夹与请求将被一并删除，此操作不可撤销。"
+            return String(format: L("「%@」及其内部的全部文件夹与请求将被一并删除，此操作不可撤销。"), String(n))
         case .sshFolder(_, let n):
-            return "「\(n)」及其内部的全部文件夹与连接将被一并删除（含相关私钥文件），此操作不可撤销。"
+            return String(format: L("「%@」及其内部的全部文件夹与连接将被一并删除（含相关私钥文件），此操作不可撤销。"), String(n))
         }
     }
 }
@@ -1000,7 +1072,7 @@ extension SettingsView {
                     Circle()
                         .fill(aiServer.running ? Color.green : Color.secondary.opacity(0.4))
                         .frame(width: 7, height: 7)
-                    Text(aiServer.running ? "运行中" : (aiServer.enabled ? "启动中…" : "已停止"))
+                    Text(aiServer.running ? L("运行中") : (aiServer.enabled ? L("启动中…") : L("已停止")))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -1016,8 +1088,8 @@ extension SettingsView {
         VStack(alignment: .leading, spacing: 8) {
             Text("连接信息").font(.system(size: 12, weight: .semibold))
 
-            aiKVRow(label: "端点", value: aiServer.endpointURL, copyable: true)
-            aiKVRow(label: "Token", value: aiServer.token.isEmpty ? "（启用后生成）" : aiServer.token,
+            aiKVRow(label: L("端点"), value: aiServer.endpointURL, copyable: true)
+            aiKVRow(label: "Token", value: aiServer.token.isEmpty ? L("（启用后生成）") : aiServer.token,
                     copyable: !aiServer.token.isEmpty)
 
             HStack(spacing: 8) {
@@ -1066,12 +1138,12 @@ extension SettingsView {
                 }
                 .controlSize(.small)
             }
-            Text("启用后桥接脚本已生成（\(AIAccessServer.bridgeScriptURL.path)）。把左侧 JSON 合并进 ~/.zcode/cli/config.json 的 mcp.servers（通用 mcpServers 格式适用于 Claude Code / Cursor），重启客户端会话即自动连接。修改端口或重新生成 Token 后需同步更新此配置。")
+            Text(String(format: L("启用后桥接脚本已生成（%@）。把左侧 JSON 合并进 ~/.zcode/cli/config.json 的 mcp.servers（通用 mcpServers 格式适用于 Claude Code / Cursor），重启客户端会话即自动连接。修改端口或重新生成 Token 后需同步更新此配置。"), String(AIAccessServer.bridgeScriptURL.path)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView {
-                Text(aiServer.enabled || !aiServer.token.isEmpty ? aiServer.zcodeConfigJSON() : "// 启用后显示")
+                Text(aiServer.enabled || !aiServer.token.isEmpty ? aiServer.zcodeConfigJSON() : L("// 启用后显示"))
                     .font(.system(size: 11, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -1121,7 +1193,7 @@ extension SettingsView {
                     .controlSize(.small)
             }
             if aiServer.auditLog.isEmpty {
-                emptyHint("还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。")
+                emptyHint(L("还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。"))
             } else {
                 let entries = Array(aiServer.auditLog.suffix(50).reversed())
                 VStack(spacing: 0) {
@@ -1157,7 +1229,7 @@ extension SettingsView {
 
     private func aiKVRow(label: String, value: String, copyable: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(label).font(.system(size: 12)).frame(width: 44, alignment: .leading)
+            Text(label).font(.system(size: 12)).frame(width: 64, alignment: .leading)
             Text(value)
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -1174,7 +1246,7 @@ extension SettingsView {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("复制\(label)")
+                .help(String(format: L("复制%@"), String(label)))
             }
         }
     }

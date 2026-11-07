@@ -69,7 +69,7 @@ struct SSHConnectBanner: View {
         case .failed(let m): return m
         case .connecting where tool.client.connectAttempt > 1:
             // 瞬时不可达自动重试中：让用户知道还在同一个点击里重试，而不是卡死。
-            return "网络暂不可达，自动重试中（第 \(tool.client.connectAttempt) 次）"
+            return String(format: L("网络暂不可达，自动重试中（第 %@ 次）"), String(tool.client.connectAttempt))
         default:
             guard let profile = tool.activeProfile else { return nil }
             // 配了默认目录就一并展示，方便确认「登录后落在哪」是否符合预期。

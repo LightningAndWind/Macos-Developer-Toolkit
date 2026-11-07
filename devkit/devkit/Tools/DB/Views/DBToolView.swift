@@ -136,7 +136,7 @@ struct DBToolView: View {
 
     private func outputRow(_ entry: DBOutputEntry) -> some View {
         // 终端流式风格：不带图标与时间戳，输入回显自带 mysql> / redis> 提示符。
-        Text(entry.text)
+        Text(L(entry.text))
             .font(.system(size: 11.5, design: .monospaced))
             .foregroundStyle(color(for: entry.direction))
             .textSelection(.enabled)

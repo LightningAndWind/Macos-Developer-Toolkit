@@ -155,7 +155,7 @@ struct RequestEditorView: View {
             }
 
             if let preview = tool.request.auth.headerValue {
-                Text("将发送：Authorization: \(preview.prefix(24))…")
+                Text(String(format: L("将发送：Authorization: %@…"), String(preview.prefix(24))))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

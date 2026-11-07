@@ -128,14 +128,14 @@ nonisolated enum DBExec {
                     timeout: timeout
                 )
                 if case .error(let message) = reply {
-                    throw DBExecError.redisProtocolError("AUTH 失败：\(message)")
+                    throw DBExecError.redisProtocolError(String(format: L("AUTH 失败：%@"), String(message)))
                 }
             }
             // 选库。
             if let database {
                 let reply = try await session.command(["SELECT", database], timeout: timeout)
                 if case .error(let message) = reply {
-                    throw DBExecError.redisProtocolError("SELECT 失败：\(message)")
+                    throw DBExecError.redisProtocolError(String(format: L("SELECT 失败：%@"), String(message)))
                 }
             }
             return session
@@ -343,15 +343,15 @@ nonisolated enum DBExec {
     private static func mysqlErrorText(_ error: MySQLError) -> String {
         switch error {
         case .server(let packet):
-            return "服务器错误 \(packet.errorCode.rawValue)：\(packet.errorMessage)"
+            return String(format: L("服务器错误 %@：%@"), String(packet.errorCode.rawValue), String(packet.errorMessage))
         case .closed:
             return "连接已关闭"
         case .invalidSyntax(let m):
-            return "SQL 语法错误：\(m)"
+            return String(format: L("SQL 语法错误：%@"), String(m))
         case .duplicateEntry(let m):
-            return "唯一键冲突：\(m)"
+            return String(format: L("唯一键冲突：%@"), String(m))
         case .unsupportedAuthPlugin(let name):
-            return "不支持的认证插件 \(name)（可尝试改用 mysql_native_password）"
+            return String(format: L("不支持的认证插件 %@（可尝试改用 mysql_native_password）"), String(name))
         default:
             return error.localizedDescription
         }

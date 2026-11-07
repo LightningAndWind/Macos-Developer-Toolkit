@@ -223,11 +223,11 @@ enum HTTPClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL(let raw):
-            return "URL 无效或以空值开始，请填写包含协议头的完整地址：\(raw.isEmpty ? "(空)" : raw)"
+            return String(format: L("URL 无效或以空值开始，请填写包含协议头的完整地址：%@"), raw.isEmpty ? "(空)" : raw)
         case .notHTTPResponse:
             return "响应不是有效的 HTTP 响应"
         case .transport(let message):
-            return "网络请求失败：\(message)"
+            return String(format: L("网络请求失败：%@"), String(message))
         case .cancelled:
             return "请求已取消"
         }

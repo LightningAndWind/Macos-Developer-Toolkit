@@ -86,6 +86,9 @@ struct GitRepo: Identifiable, Hashable, Codable {
     var path: String
     /// 绑定使用的密钥；`nil` 表示走系统默认（agent / ~/.ssh / 仓库 config）。
     var keyID: UUID?
+    /// 选定的「当前使用」远程名（fetch / 拉取 / 推送作用于它）；`nil` = 未选定，回落 origin 优先。
+    /// 远程是仓库级配置（与分支无关），选定持久化在仓库登记上，跨分支 / 跨会话一致。
+    var preferredRemoteName: String?
     var createdAt: Date = .now
     var updatedAt: Date = .now
 

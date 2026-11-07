@@ -20,7 +20,7 @@ struct SFTPProfilePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("为\(side.side == .left ? "左" : "右")侧选择 SSH 连接")
+                Text(String(format: L("为%@侧选择 SSH 连接"), side.side == .left ? L("左") : L("右")))
                     .font(.headline)
                 Spacer()
                 Button {

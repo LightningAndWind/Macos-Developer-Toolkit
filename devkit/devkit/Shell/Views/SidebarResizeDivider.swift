@@ -11,12 +11,15 @@ import AppKit
 import SwiftUI
 
 struct SidebarResizeDivider: View {
-    /// 侧栏宽度绑定（由上层 `@AppStorage` 提供，拖动过程即时生效并自动持久化）。
+    /// 侧栏宽度绑定（拖动过程即时生效；持久化时机由上层决定——见 `onCommit`）。
     @Binding var width: CGFloat
     /// 可调范围。
     let range: ClosedRange<CGFloat>
     /// 双击恢复的默认宽度。
     let defaultWidth: CGFloat
+    /// 一次调整落定（拖拽结束 / 双击恢复）后的回调：上层在此把最终宽度持久化，
+    /// 避免拖拽期间每帧写 UserDefaults（同步 I/O 会明显拖累跟手度）。
+    var onCommit: (() -> Void)? = nil
 
     /// 悬停中（决定光标与高亮）。
     @State private var isHovering = false
@@ -37,7 +40,10 @@ struct SidebarResizeDivider: View {
                     .frame(width: Theme.Metrics.splitterHitWidth)
                     .contentShape(Rectangle())
                     .gesture(resizeGesture)
-                    .onTapGesture(count: 2) { width = defaultWidth }
+                    .onTapGesture(count: 2) {
+                        width = defaultWidth
+                        onCommit?()
+                    }
             }
             .onHover { hovering in
                 isHovering = hovering
@@ -63,6 +69,9 @@ struct SidebarResizeDivider: View {
                 let base = startWidth ?? width
                 width = min(max(base + value.translation.width, range.lowerBound), range.upperBound)
             }
-            .onEnded { _ in startWidth = nil }
+            .onEnded { _ in
+                startWidth = nil
+                onCommit?()
+            }
     }
 }

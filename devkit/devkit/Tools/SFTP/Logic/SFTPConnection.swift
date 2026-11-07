@@ -58,7 +58,7 @@ final class SFTPConnection: SFTPBackend {
             engine = SystemSSHTransport(profile: profile, keyURL: keyURL, knownHostsPath: knownHosts)
         case .password:
             guard SSHHostKeyStore.isTrusted(host: profile.host, port: profile.port) else {
-                state = .failed("尚未信任主机 \(profile.host)。\n请先在「SSH 终端」工具中成功连接一次该主机完成首次信任确认，再回来使用 SFTP。")
+                state = .failed(String(format: L("尚未信任主机 %@。\n请先在「SSH 终端」工具中成功连接一次该主机完成首次信任确认，再回来使用 SFTP。"), String(profile.host)))
                 return
             }
             do {

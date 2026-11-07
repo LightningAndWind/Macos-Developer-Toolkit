@@ -15,8 +15,14 @@ final class AppPreferences {
     /// 侧栏宽度偏好键。视图侧用 `@AppStorage` 直接绑定，保证拖拽时 SwiftUI 实时刷新。
     static let sidebarWidthKey = "devkit.sidebar.width"
 
+    /// 侧栏收起偏好键（收起成只显示图标的窄轨，Chrome 竖排标签样式）。
+    static let sidebarCollapsedKey = "devkit.sidebar.collapsed"
+
     /// 外观模式偏好键（跟随系统 / 浅色 / 深色）。视图侧用 `@AppStorage` 绑定，见 `AppAppearanceMode`。
     static let appearanceModeKey = "devkit.appearance.mode"
+
+    /// 界面语言偏好键（跟随系统 / 简体中文 / English）。视图侧用 `@AppStorage` 绑定，见 `AppLanguageMode`。
+    static let languageOverrideKey = "devkit.language.override"
 
     /// 防止锁屏开关偏好键。视图侧用 `@AppStorage` 绑定（见 `SidebarFooterBar`），生效走 `SleepKeeper`。
     static let preventSleepKey = "devkit.sleep.prevent"
@@ -111,7 +117,7 @@ final class AppPreferences {
         case directoryNotWritable(String)
         var errorDescription: String? {
             switch self {
-            case .directoryNotWritable(let p): return "目录不可写：\(p)"
+            case .directoryNotWritable(let p): return String(format: L("目录不可写：%@"), String(p))
             }
         }
     }

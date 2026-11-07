@@ -78,7 +78,7 @@ struct JSONToolView: View {
                 }
             }
         } label: {
-            Label("缩进 \(tool.indent.label)", systemImage: "shift")
+            Label(String(format: L("缩进 %@"), String(tool.indent.label)), systemImage: "shift")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
@@ -135,7 +135,7 @@ struct JSONToolView: View {
         ContentUnavailableView {
             Label("无法构建树", systemImage: "list.bullet.indent.curved")
         } description: {
-            Text(tool.parseError?.displayText ?? "请输入合法的 JSON 后再查看树形视图。")
+            Text(L(tool.parseError?.displayText ?? "请输入合法的 JSON 后再查看树形视图。"))
         }
     }
 
@@ -152,13 +152,13 @@ struct JSONToolView: View {
                 statusLabel("有效 JSON", systemImage: "checkmark.circle.fill", color: .green)
                 if let value = tool.parsedValue {
                     let stats = value.stats
-                    Text("节点 \(stats.nodeCount)").foregroundStyle(.secondary)
-                    Text("深度 \(stats.maxDepth)").foregroundStyle(.secondary)
+                    Text(String(format: L("节点 %@"), String(stats.nodeCount))).foregroundStyle(.secondary)
+                    Text(String(format: L("深度 %@"), String(stats.maxDepth))).foregroundStyle(.secondary)
                     Text(typeBreakdown(stats)).foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            Text("\(tool.characterCount) 字符 · \(tool.lineCount) 行")
+            Text(String(format: L("%@ 字符 · %@ 行"), String(tool.characterCount), String(tool.lineCount)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -176,12 +176,12 @@ struct JSONToolView: View {
 
     private func typeBreakdown(_ stats: JSONValue.Stats) -> String {
         var parts: [String] = []
-        if stats.objectCount > 0 { parts.append("对象 \(stats.objectCount)") }
-        if stats.arrayCount > 0 { parts.append("数组 \(stats.arrayCount)") }
-        if stats.stringCount > 0 { parts.append("字符串 \(stats.stringCount)") }
-        if stats.numberCount > 0 { parts.append("数字 \(stats.numberCount)") }
-        if stats.boolCount > 0 { parts.append("布尔 \(stats.boolCount)") }
-        if stats.nullCount > 0 { parts.append("空 \(stats.nullCount)") }
+        if stats.objectCount > 0 { parts.append(String(format: L("对象 %@"), String(stats.objectCount))) }
+        if stats.arrayCount > 0 { parts.append(String(format: L("数组 %@"), String(stats.arrayCount))) }
+        if stats.stringCount > 0 { parts.append(String(format: L("字符串 %@"), String(stats.stringCount))) }
+        if stats.numberCount > 0 { parts.append(String(format: L("数字 %@"), String(stats.numberCount))) }
+        if stats.boolCount > 0 { parts.append(String(format: L("布尔 %@"), String(stats.boolCount))) }
+        if stats.nullCount > 0 { parts.append(String(format: L("空 %@"), String(stats.nullCount))) }
         return parts.joined(separator: " · ")
     }
 

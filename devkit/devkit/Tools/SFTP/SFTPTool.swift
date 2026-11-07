@@ -293,8 +293,8 @@ final class SFTPTool: DevkitTool {
 
         if let error, var summary = finished {
             summary.error = cancelled
-                ? "已取消（\(summary.completedFiles)/\(summary.totalFiles) 项）"
-                : "传输失败：\(error)"
+                ? String(format: L("已取消（%@/%@ 项）"), String(summary.completedFiles), String(summary.totalFiles))
+                : String(format: L("传输失败：%@"), String(error))
             summary.isEnumerating = false
             transfer = summary
             Task { [weak self] in
@@ -478,7 +478,7 @@ final class SFTPSideState {
             errorMessage = nil
         } catch is CancellationError {
         } catch {
-            errorMessage = "无法进入 \(trimmed)：\(error.localizedDescription)"
+            errorMessage = String(format: L("无法进入 %@：%@"), String(trimmed), String(error.localizedDescription))
         }
     }
 
@@ -514,7 +514,7 @@ final class SFTPSideState {
             try await backend.makeDirectory(SFTPTool.joinPath(path, trimmed))
             await refresh()
         } catch {
-            errorMessage = "新建文件夹失败：\(error.localizedDescription)"
+            errorMessage = String(format: L("新建文件夹失败：%@"), String(error.localizedDescription))
         }
     }
 

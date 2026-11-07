@@ -58,7 +58,7 @@ struct GitRepoEditorView: View {
             .formStyle(.grouped)
 
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L(errorMessage)).font(.caption).foregroundStyle(.red)
             }
 
             HStack {
@@ -112,7 +112,7 @@ struct GitRepoEditorView: View {
             dismiss()
             onSaved(draft)
         } catch {
-            errorMessage = "保存失败：\(error.localizedDescription)"
+            errorMessage = String(format: L("保存失败：%@"), String(error.localizedDescription))
         }
     }
 }

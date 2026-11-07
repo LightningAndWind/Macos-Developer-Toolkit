@@ -99,7 +99,7 @@ struct HTTPStartupChooser: View {
     private var parentPlaceholder: String {
         guard let targetFolder else { return "在根目录新建文件夹…" }
         let name = HTTPCollectionStore.allFolders().first { $0.id == targetFolder }?.name ?? "文件夹"
-        return "在「\(name)」下新建文件夹…"
+        return String(format: L("在「%@」下新建文件夹…"), String(name))
     }
 
     private func open(_ record: HTTPSavedRequest) {

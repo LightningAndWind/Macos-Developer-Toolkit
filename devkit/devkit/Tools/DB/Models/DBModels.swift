@@ -99,9 +99,9 @@ enum DBExecError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .badDatabaseField(let m): return m
-        case .redisProtocolError(let m): return "Redis 协议错误：\(m)"
+        case .redisProtocolError(let m): return String(format: L("Redis 协议错误：%@"), String(m))
         case .queryTimeout: return "执行超时，连接已断开"
-        case .connectFailed(let m): return "连接失败：\(m)"
+        case .connectFailed(let m): return String(format: L("连接失败：%@"), String(m))
         case .ioFailed(let m): return m
         }
     }

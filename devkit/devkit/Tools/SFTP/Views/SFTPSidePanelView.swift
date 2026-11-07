@@ -55,7 +55,7 @@ struct SFTPSidePanelView: View {
                 Task { await state.deleteSelection() }
             }
         } message: {
-            Text("确定删除选中的 \(state.selection.count) 项？文件夹会连同其内容一并删除，无法撤销。")
+            Text(String(format: L("确定删除选中的 %@ 项？文件夹会连同其内容一并删除，无法撤销。"), String(state.selection.count)))
         }
         .alert("新建文件夹", isPresented: $isNamingFolder) {
             TextField("名称", text: $newFolderName)
@@ -77,7 +77,7 @@ struct SFTPSidePanelView: View {
         case .connecting:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("正在连接 \(state.profile.map { "\($0.username)@\($0.host)" } ?? "本机")…")
+                Text(String(format: L("正在连接 %@…"), state.profile.map { "\($0.username)@\($0.host)" } ?? L("本机")))
                     .foregroundStyle(.secondary)
             }
         case .connected:
@@ -193,18 +193,18 @@ struct SFTPSidePanelView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("\(state.entries.count) 项")
+                Text(String(format: L("%@ 项"), String(state.entries.count)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if !state.selection.isEmpty {
-                    Text("已选 \(state.selection.count) 项")
+                    Text(String(format: L("已选 %@ 项"), String(state.selection.count)))
                         .font(.caption)
                         .foregroundStyle(Color.accentColor)
                 }
             }
             if let error = state.errorMessage {
-                Text(error)
+                Text(L(error))
                     .font(.caption)
                     .foregroundStyle(.red)
                     .lineLimit(3)

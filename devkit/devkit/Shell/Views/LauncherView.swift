@@ -15,10 +15,11 @@ struct LauncherView: View {
         let all = ToolRegistry.shared.descriptors
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return all }
         let q = query.lowercased()
+        // 按本地化后的文案匹配（英文界面可用英文关键词搜到工具）；查表回退原文，中文输入同样命中。
         return all.filter {
-            $0.title.lowercased().contains(q)
-            || $0.subtitle.lowercased().contains(q)
-            || $0.category.rawValue.lowercased().contains(q)
+            L($0.title).lowercased().contains(q)
+            || L($0.subtitle).lowercased().contains(q)
+            || L($0.category.rawValue).lowercased().contains(q)
         }
     }
 
@@ -30,13 +31,13 @@ struct LauncherView: View {
                     ForEach(ToolDescriptor.ToolCategory.allCases, id: \.self) { cat in
                         let items = filteredDescriptors.filter { $0.category == cat }
                         if !items.isEmpty {
-                            section(title: cat.rawValue) {
+                            section(title: L(cat.rawValue)) {
                                 grid(items)
                             }
                         }
                     }
                 } else {
-                    section(title: "搜索结果") {
+                    section(title: L("搜索结果")) {
                         grid(filteredDescriptors)
                     }
                 }
@@ -138,11 +139,11 @@ private struct ToolCard: View {
                             .fill(Color.accentColor.opacity(0.12))
                     )
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(descriptor.title)
+                    Text(L(descriptor.title))
                         .font(.system(size: compact ? 13 : 15, weight: .semibold))
                         .lineLimit(1)
                     if !compact {
-                        Text(descriptor.subtitle)
+                        Text(L(descriptor.subtitle))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
@@ -164,7 +165,7 @@ private struct ToolCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .help("\(descriptor.title) - \(descriptor.subtitle)")
+        .help("\(L(descriptor.title)) - \(L(descriptor.subtitle))")
     }
 }
 

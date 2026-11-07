@@ -61,7 +61,7 @@ struct GitCloneSheet: View {
             }
 
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L(errorMessage)).font(.caption).foregroundStyle(.red)
             }
 
             HStack {

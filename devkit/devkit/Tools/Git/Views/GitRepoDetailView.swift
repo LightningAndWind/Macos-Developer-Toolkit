@@ -106,7 +106,7 @@ struct GitRepoDetailView: View {
                         Button {
                             tool.section = .changes
                         } label: {
-                            chip("⚠ 冲突 \(tool.status.conflicted.count) 个待解决", .red)
+                            chip(String(format: L("⚠ 冲突 %@ 个待解决"), String(tool.status.conflicted.count)), .red)
                         }
                         .buttonStyle(.plain)
                         .help("点击查看冲突文件")
@@ -140,33 +140,28 @@ struct GitRepoDetailView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.5)))
     }
 
-    /// 顶部当前分支：点击弹出本地分支列表，点选其他分支即切换（与「绑定密钥」同构：
-    /// borderless Menu + 勾选当前项 + 手指光标）。分支尚未加载或操作进行中时退回纯展示/禁用。
+    /// 顶部当前分支：悬停高亮的按钮，点击弹出本地分支列表，点选其他分支即切换（勾选当前项）。
+    /// 分支尚未加载或操作进行中时退回纯展示/禁用。
     @ViewBuilder
     private var branchIndicator: some View {
         if tool.localBranches.isEmpty {
             branchLabel
         } else {
-            Menu {
-                ForEach(tool.localBranches) { branch in
-                    Button {
-                        if !branch.isCurrent { Task { await tool.checkout(branch: branch.name) } }
-                    } label: {
-                        labelRow(branch.name, checked: branch.isCurrent)
-                    }
-                }
-            } label: {
+            GitBannerMenu(
+                options: tool.localBranches.map { branch in
+                    GitBannerMenuOption(
+                        title: branch.name,
+                        checked: branch.isCurrent,
+                        action: branch.isCurrent ? nil : { Task { await tool.checkout(branch: branch.name) } })
+                },
+                help: "切换分支（点击选择本地分支）",
+                isDisabled: tool.isBusy
+            ) { _ in
                 HStack(spacing: 5) {
                     branchLabel
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
                 }
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .disabled(tool.isBusy)
-            .help("切换分支（点击选择本地分支）")
-            .pointingHandOnHover()
         }
     }
 
@@ -193,70 +188,94 @@ struct GitRepoDetailView: View {
         .disabled(disabled)
     }
 
-    /// 当前仓库绑定密钥：点击弹出菜单直接改绑（与「新增仓库」不同，仅换密钥）。
+    /// 当前仓库绑定密钥：悬停加深的胶囊按钮，点击弹出列表直接改绑（与「新增仓库」不同，仅换密钥）。
     @ViewBuilder
     private var keyIndicator: some View {
         if let repo = tool.selectedRepo {
-            Menu {
-                Button { tool.rebindKey(to: nil) } label: {
-                    labelRow("不绑定（系统默认）", checked: repo.keyID == nil)
-                }
-                if !keys.isEmpty { Divider() }
-                ForEach(keys) { key in
-                    Button { tool.rebindKey(to: key.id) } label: {
-                        labelRow("\(key.name) · \(key.algorithm.label)", checked: repo.keyID == key.id)
+            GitBannerMenu(
+                sections: [
+                    [GitBannerMenuOption(title: "不绑定（系统默认）",
+                                         checked: repo.keyID == nil,
+                                         action: { tool.rebindKey(to: nil) })],
+                    keys.map { key in
+                        GitBannerMenuOption(
+                            title: "\(key.name) · \(key.algorithm.label)",
+                            checked: repo.keyID == key.id,
+                            action: { tool.rebindKey(to: key.id) })
                     }
-                }
-            } label: {
+                ],
+                help: "绑定密钥（点击改绑）",
+                isDisabled: tool.isBusy,
+                showsHoverBackground: false
+            ) { hovering in
                 if let keyID = repo.keyID, let key = GitKeyStore.load(id: keyID) {
-                    Label(key.name, systemImage: "key.fill")
-                        .font(.caption)
-                        .foregroundStyle(.tint)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                    HStack(spacing: 4) {
+                        Label(key.name, systemImage: "key.fill")
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(Color.accentColor.opacity(hovering ? 0.24 : 0.12)))
                 } else {
-                    Label("默认密钥", systemImage: "key")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Label("默认密钥", systemImage: "key")
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(hovering ? Color.primary : Color.secondary)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(hovering ? Theme.Palette.hoverOverlay : Color.clear))
                 }
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("绑定密钥（点击改绑）")
         }
     }
 
-    /// 远程地址行：展示首选远程（origin 优先），铅笔按钮弹出配置抽屉；未配置时给出引导文案。
+    /// 远程地址行：点击弹出远程列表选定「当前使用的远程」（fetch / 拉取 / 推送作用于它），
+    /// 铅笔按钮弹出管理抽屉（增删 / 改地址）；未配置时给出引导文案。
+    @ViewBuilder
     private var remoteRow: some View {
         HStack(spacing: 4) {
             Image(systemName: "link")
                 .font(.system(size: 9))
                 .foregroundStyle(.tertiary)
-            if let remote = tool.primaryRemote {
-                Text(remote.displayURL)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } else {
+            if tool.remotes.isEmpty {
                 Text("未配置远程地址")
                     .font(.system(size: 10)).foregroundStyle(.tertiary)
+            } else {
+                GitBannerMenu(
+                    options: tool.remotes.map { remote in
+                        GitBannerMenuOption(
+                            title: "\(remote.name) · \(remote.displayURL)",
+                            checked: tool.effectiveRemote?.name == remote.name,
+                            action: { tool.selectRemote(name: remote.name) })
+                    },
+                    help: "选择当前使用的远程（fetch / 拉取 / 推送将作用于它）",
+                    isDisabled: tool.isBusy
+                ) { _ in
+                    HStack(spacing: 4) {
+                        if let name = tool.effectiveRemote?.name {
+                            Text(name)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(tool.effectiveRemote?.displayURL ?? "—")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            Button {
+            BannerIconButton(symbol: "pencil",
+                             help: "管理远程仓库地址（增删 / 改地址 / 设为使用）",
+                             isDisabled: tool.isBusy) {
                 showRemoteEditor = true
-            } label: {
-                Image(systemName: "pencil").font(.system(size: 9))
             }
-            .buttonStyle(.borderless)
-            .pointingHandOnHover()
-            .help("配置远程仓库地址")
-            .disabled(tool.isBusy)
         }
-    }
-
-    private func labelRow(_ text: String, checked: Bool) -> some View {
-        HStack { Text(text); Spacer(); if checked { Image(systemName: "checkmark") } }
     }
 
     // MARK: - 分区切换（按钮式，避免 I 型光标）
@@ -301,7 +320,7 @@ private struct SectionChip: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: section.symbol).font(.system(size: 10))
-                Text(section.rawValue).font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                Text(L(section.rawValue)).font(.system(size: 12, weight: isSelected ? .semibold : .regular))
             }
             .foregroundStyle(isSelected ? Color.white : Color.primary)
             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -313,7 +332,8 @@ private struct SectionChip: View {
     }
 }
 
-/// 远程地址配置抽屉：逐条展示远程并可直接改地址（保存时 fetch/push 一并更新）；无远程时可新增。
+/// 远程地址管理抽屉：逐条展示远程 —— 可改地址、设为当前使用（fetch / 拉取 / 推送作用于它）、
+/// 删除（带确认）；无远程时可新增。失败原因就地内联展示（抽屉打开时后台 alert 不会显示）。
 struct GitRemoteEditorSheet: View {
     @Bindable var tool: GitTool
     @Environment(\.dismiss) private var dismiss
@@ -322,10 +342,18 @@ struct GitRemoteEditorSheet: View {
     @State private var drafts: [String: String] = [:]
     @State private var newName = ""
     @State private var newURL = ""
+    /// 内联错误（重名 / git 拒绝等）：不依赖被抽屉挡住的 alert。
+    @State private var inlineError: String?
+    /// 待确认删除的远程。
+    @State private var pendingRemove: GitRemote?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("远程仓库地址").font(.headline)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("远程仓库地址").font(.headline)
+                Text("「使用中」的远程作用于 fetch / 拉取 / 推送；选定与分支无关，跟随仓库保存。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -335,6 +363,15 @@ struct GitRemoteEditorSheet: View {
                     }
                     ForEach(tool.remotes) { remote in
                         remoteEditorRow(remote)
+                    }
+                    if let error = inlineError {
+                        Label {
+                            Text(error).fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.orange)
                     }
                 }
                 .padding(2)
@@ -350,27 +387,71 @@ struct GitRemoteEditorSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 560, height: 380)
+        .frame(width: 560, height: 420)
         .task {
             drafts = Dictionary(uniqueKeysWithValues: tool.remotes.map { ($0.name, $0.displayURL) })
+        }
+        .confirmationDialog("删除远程？", isPresented: Binding(
+            get: { pendingRemove != nil },
+            set: { if !$0 { pendingRemove = nil } }
+        ), titleVisibility: .visible, presenting: pendingRemove) { remote in
+            Button("删除", role: .destructive) {
+                Task {
+                    if let error = await tool.removeRemote(name: remote.name) {
+                        inlineError = error
+                    } else {
+                        drafts.removeValue(forKey: remote.name)
+                        inlineError = nil
+                    }
+                }
+                pendingRemove = nil
+            }
+            Button("取消", role: .cancel) { pendingRemove = nil }
+        } message: { remote in
+            Text(String(format: L("仅移除本地登记的远程名与地址（%@），不影响远程仓库本身的数据。"), String(remote.name)))
         }
     }
 
     @ViewBuilder
     private func remoteEditorRow(_ remote: GitRemote) -> some View {
+        let isCurrent = tool.effectiveRemote?.name == remote.name
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Text(remote.name).font(.system(size: 12, weight: .semibold, design: .monospaced))
+                if isCurrent {
+                    Text("使用中")
+                        .font(.system(size: 9, weight: .semibold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.green.opacity(0.15)))
+                        .foregroundStyle(.green)
+                }
                 Spacer()
+                if !isCurrent {
+                    Button("设为使用") { tool.selectRemote(name: remote.name) }
+                        .help("fetch / 拉取 / 推送将作用于该远程")
+                }
                 Button("保存") {
                     let url = trimmed(drafts[remote.name] ?? "")
                     guard !url.isEmpty else { return }
                     Task {
-                        await tool.setRemoteURL(name: remote.name, url: url)
-                        drafts[remote.name] = url
+                        if let error = await tool.setRemoteURL(name: remote.name, url: url) {
+                            inlineError = error
+                        } else {
+                            drafts[remote.name] = url
+                            inlineError = nil
+                        }
                     }
                 }
-                .disabled(!canSave(remote))
+                .disabled(!canSave(remote) || tool.isBusy)
+                Button {
+                    pendingRemove = remote
+                } label: {
+                    Image(systemName: "trash").font(.system(size: 11))
+                }
+                .buttonStyle(.borderless)
+                .pointingHandOnHover()
+                .help("删除该远程")
+                .disabled(tool.isBusy)
             }
             TextField("远程地址", text: Binding(
                 get: { drafts[remote.name] ?? "" },
@@ -391,17 +472,24 @@ struct GitRemoteEditorSheet: View {
             TextField("https://… 或 git@…", text: $newURL)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 11, design: .monospaced))
-            Button("添加") {
-                let n = trimmed(newName), u = trimmed(newURL)
-                guard !n.isEmpty, !u.isEmpty else { return }
-                Task {
-                    await tool.addRemote(name: n, url: u)
-                    drafts[n] = u
-                    newName = ""
-                    newURL = ""
-                }
+                .onSubmit { addRemote() }
+            Button("添加") { addRemote() }
+                .disabled(trimmed(newName).isEmpty || trimmed(newURL).isEmpty || tool.isBusy)
+        }
+    }
+
+    private func addRemote() {
+        let n = trimmed(newName), u = trimmed(newURL)
+        guard !n.isEmpty, !u.isEmpty else { return }
+        Task {
+            if let error = await tool.addRemote(name: n, url: u) {
+                inlineError = error
+            } else {
+                drafts[n] = u
+                newName = ""
+                newURL = ""
+                inlineError = nil
             }
-            .disabled(trimmed(newName).isEmpty || trimmed(newURL).isEmpty)
         }
     }
 

@@ -193,7 +193,7 @@ struct HistoryDetailView: View {
                 HTTPSection(title: "响应体 (Body)" + (snapshot.isBodyTruncated ? " · 已截断" : "")) {
                     responseBodyView(snapshot)
                     if snapshot.isBodyTruncated {
-                        Text("响应体较大，历史中仅保存前 \(HTTPDisplay.size(HTTPHistoryStore.maxBodyBytes))；如需完整内容请在编辑器中重新发送（单次响应最多保留 \(HTTPDisplay.size(HTTPClient.maxBodyBytes))）。")
+                        Text(String(format: L("响应体较大，历史中仅保存前 %@；如需完整内容请在编辑器中重新发送（单次响应最多保留 %@）。"), HTTPDisplay.size(HTTPHistoryStore.maxBodyBytes), HTTPDisplay.size(HTTPClient.maxBodyBytes)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -215,7 +215,7 @@ struct HistoryDetailView: View {
         } else if let text = snapshot.bodyText {
             SelectableCodeBlock(text: text)
         } else {
-            Text("响应体为二进制内容（\(HTTPDisplay.size(snapshot.sizeBytes))），无法以文本显示。")
+            Text(String(format: L("响应体为二进制内容（%@），无法以文本显示。"), HTTPDisplay.size(snapshot.sizeBytes)))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

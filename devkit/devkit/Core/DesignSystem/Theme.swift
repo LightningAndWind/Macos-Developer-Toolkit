@@ -19,6 +19,8 @@ enum Theme {
         static let sidebarMinWidth: CGFloat = 108
         /// 侧栏最大宽度：再宽会明显挤压内容区，收益递减。
         static let sidebarMaxWidth: CGFloat = 360
+        /// 侧栏收起（窄轨）宽度：仅容纳标签图标 / “+” / 底部操作按钮的图标栏。
+        static let sidebarRailWidth: CGFloat = 46
         /// 分割线拖拽热区宽度（视觉仍为 1pt 细线，仅热区加宽）。
         static let splitterHitWidth: CGFloat = 7
         /// 横向分割线（上下分区）拖拽热区高度；视觉仍为 1pt 细线，仅热区加高。
@@ -79,6 +81,20 @@ enum Theme {
         /// 终端回滚缓冲（scrollback）行数上限：只保留最近这么多行历史（视口之上），超出后丢弃最早的行。
         /// SwiftTerm 默认 500；提到 3000 兼顾“能往回翻更多”与内存可控（不会无限保存整会话）。
         static let terminalScrollbackLines: Int = 3000
+        /// 终端记事本右侧面板的固定宽度。
+        static let notepadPanelWidth: CGFloat = 256
+        /// 记事本面板放大宽度（放大编辑时列表与编辑栏一起加宽）。
+        static let notepadPanelExpandedWidth: CGFloat = 420
+        /// 记事本内容编辑器常规高度。
+        static let notepadEditorHeight: CGFloat = 92
+        /// 记事本内容编辑器放大高度。
+        static let notepadEditorExpandedHeight: CGFloat = 220
+        /// 终端卡片与右侧面板 / 竖向工具条之间的间距（与横幅-终端间隙同视觉层级）。
+        static let terminalSideGap: CGFloat = 8
+        /// 右缘竖向工具条（类 IDE stripe）的宽度。
+        static let sideStripWidth: CGFloat = 34
+        /// 右缘竖向工具条单个按钮的触控目标边长（28×28，远大于普通小图标钮）。
+        static let sideStripButtonSize: CGFloat = 28
     }
 
     /// 字体令牌。

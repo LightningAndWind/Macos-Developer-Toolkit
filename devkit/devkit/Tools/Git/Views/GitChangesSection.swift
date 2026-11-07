@@ -225,11 +225,16 @@ struct GitChangesSection: View {
                     .toggleStyle(.checkbox)
                     .font(.caption)
                 Spacer()
-                Button("提交") { commit() }
+                // 一键：暂存全部 → 提交 → 推送（空步骤智能跳过）。amend 语义与「暂存全部 + 新提交」冲突，勾选时禁用。
+                Button("暂存&提交&推送") { stageCommitAndPush() }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(tool.isBusy || amend
+                              || message.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .help("git add -A → git commit → git push（无变更 / 无待推送的步骤自动跳过）")
+                Button("提交") { commit() }
                     .disabled(tool.isBusy || (!amend && !hasStaged)
                               || (!amend && message.trimmingCharacters(in: .whitespaces).isEmpty))
+                    .keyboardShortcut(.return, modifiers: .command)
                 Button("推送") { Task { await tool.push() } }
                     .disabled(tool.isBusy || !tool.hasUnpushed)
                     .help(tool.hasUnpushed ? "git push" : "没有待推送的提交")
@@ -243,6 +248,17 @@ struct GitChangesSection: View {
         guard amend || (!msg.isEmpty && hasStaged) else { return }
         Task {
             await tool.commit(message: msg.isEmpty ? " " : msg, amend: amend)
+            message = ""
+            amend = false
+        }
+    }
+
+    /// 一键暂存 & 提交 & 推送：完成后清空提交信息输入框。
+    private func stageCommitAndPush() {
+        let msg = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !msg.isEmpty, !amend else { return }
+        Task {
+            await tool.stageCommitPush(message: msg)
             message = ""
             amend = false
         }

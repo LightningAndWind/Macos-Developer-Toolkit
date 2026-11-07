@@ -302,7 +302,7 @@ final class GitTool: DevkitTool {
         // 优先保留 error/fatal 行，其次取前三行摘要。
         let brief = (kept.first { $0.contains("error:") || $0.contains("fatal:") }.map { [$0] } ?? Array(kept.prefix(3)))
             .joined(separator: " ")
-        showToast("未能完成拉取：\(brief.isEmpty ? "请查看变更区后重试" : brief)", warning: true)
+        showToast(String(format: L("未能完成拉取：%@"), brief.isEmpty ? L("请查看变更区后重试") : brief), warning: true)
     }
 
     /// 执行一个非流式动作：忙锁 + 错误捕获 + 成功后刷新状态（可选成功 toast）。
@@ -393,24 +393,107 @@ final class GitTool: DevkitTool {
 
     // —— 远程 ——
 
-    /// 首选远程（origin 优先），用于横幅展示当前远程地址。
+    /// 首选远程（origin 优先），用于未选定时的兜底展示与 push 自动建上游。
     var primaryRemote: GitRemote? {
         remotes.first { $0.name == "origin" } ?? remotes.first
     }
 
-    /// 修改远程地址（fetch 与 push 一并更新）。
-    func setRemoteURL(name: String, url: String) async {
-        await perform({ try await $0.setRemoteURL(name: name, url: url) }, success: "已更新远程「\(name)」的地址")
+    /// 当前生效的远程：用户选定（持久化在仓库登记上）优先，已失效回落 origin 优先。
+    /// fetch / 拉取 / 推送均作用于它。
+    var effectiveRemote: GitRemote? {
+        if let name = selectedRepo?.preferredRemoteName,
+           let hit = remotes.first(where: { $0.name == name }) {
+            return hit
+        }
+        return primaryRemote
     }
 
-    /// 新增远程。
-    func addRemote(name: String, url: String) async {
-        await perform({ try await $0.addRemote(name: name, url: url) }, success: "已添加远程「\(name)」")
+    /// 选定「当前使用的远程」并持久化（跨分支 / 跨会话一致）；`nil` = 清除选定，回落 origin 优先。
+    func selectRemote(name: String?) {
+        guard var repo = selectedRepo else { return }
+        repo.preferredRemoteName = name
+        try? GitRepoStore.save(repo)
+        selectedRepo = repo
     }
 
-    func fetch() async { await performStreaming(title: "git fetch", presentsConsole: false, success: "已 fetch") { git, line in try await git.fetch(remote: nil, onLine: line) } }
-    func pull() async { await performStreaming(title: "git pull", presentsConsole: false, syncFailure: true, success: "已拉取") { git, line in try await git.pull(onLine: line) } }
-    func push() async { await performStreaming(title: "git push", presentsConsole: false, success: "已推送") { git, line in try await git.push(onLine: line) } }
+    /// 修改远程地址（fetch 与 push 一并更新）：返回错误文案（nil = 成功），供抽屉内联展示 ——
+    /// 抽屉打开时后台的 alert 不会显示，失败原因必须就地呈现。
+    @discardableResult
+    func setRemoteURL(name: String, url: String) async -> String? {
+        guard let repo = selectedRepo, repo.isValid else { return "仓库路径不存在或已失效" }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await GitRepository(repo: repo).setRemoteURL(name: name, url: url)
+            await refreshAll()
+            showToast(String(format: L("已更新远程「%@」的地址"), String(name)), warning: false)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// 新增远程：重名 / 含空格等先就地校验，git 拒绝时返回错误文案（nil = 成功）。
+    @discardableResult
+    func addRemote(name: String, url: String) async -> String? {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return "远程名称不能为空" }
+        if trimmedName.contains(where: { $0.isWhitespace }) { return "远程名称不能包含空格" }
+        guard let repo = selectedRepo, repo.isValid else { return "仓库路径不存在或已失效" }
+        // 同名远程 git 必然拒绝；直接给出可操作的指引而不是让命令报错。
+        if remotes.contains(where: { $0.name == trimmedName }) {
+            return String(format: L("远程「%@」已存在，可直接修改其地址，或删除后重新添加"), String(trimmedName))
+        }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await GitRepository(repo: repo).addRemote(name: trimmedName, url: url)
+            await refreshAll()
+            showToast(String(format: L("已添加远程「%@」"), String(trimmedName)), warning: false)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// 删除远程：若删的是当前选定远程则清除选定（回落 origin 优先）。返回错误文案（nil = 成功）。
+    @discardableResult
+    func removeRemote(name: String) async -> String? {
+        guard let repo = selectedRepo, repo.isValid else { return "仓库路径不存在或已失效" }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        do {
+            try await GitRepository(repo: repo).removeRemote(name: name)
+            if selectedRepo?.preferredRemoteName == name { selectRemote(name: nil) }
+            await refreshAll()
+            showToast(String(format: L("已删除远程「%@」"), String(name)), warning: false)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func fetch() async {
+        let remote = effectiveRemote?.name
+        await performStreaming(title: "git fetch", presentsConsole: false, success: "已 fetch") { git, line in
+            try await git.fetch(remote: remote, onLine: line)
+        }
+    }
+    func pull() async {
+        let remote = effectiveRemote?.name
+        await performStreaming(title: "git pull", presentsConsole: false, syncFailure: true, success: "已拉取") { git, line in
+            try await git.pull(remote: remote, onLine: line)
+        }
+    }
+    func push() async {
+        let remote = effectiveRemote?.name
+        await performStreaming(title: "git push", presentsConsole: false, success: "已推送") { git, line in
+            try await git.push(remote: remote, onLine: line)
+        }
+    }
 
     /// 刷新工作区：重读 status / 分支 / 历史（仅本地，不联网），驱动该按钮转圈。
     func refreshWorkspace() async {
@@ -445,6 +528,48 @@ final class GitTool: DevkitTool {
             showToast("已拉取并推送", warning: false)
         } catch {
             // 同步失败可能是冲突导致：先刷新再分流，冲突时不弹错误。
+            await refreshAll()
+            handleSyncFailureOrConflict(error)
+        }
+    }
+
+    /// 一键暂存并提交、推送：`git add -A` → `git commit` → `git push`。
+    /// 各步智能跳过：无变更不提交、无未推送内容不推送，空场景给警告提示而非报错。
+    func stageCommitPush(message: String) async {
+        guard let repo = selectedRepo, repo.isValid else {
+            errorMessage = "仓库路径不存在或已失效"
+            return
+        }
+        guard !status.isRebasing else {
+            showToast("变基进行中，请先在分支区中止变基再提交", warning: true)
+            return
+        }
+        isBusy = true
+        errorMessage = nil
+        defer { isBusy = false }
+        let git = GitRepository(repo: repo)
+        do {
+            // 有任何变更（已暂存 / 未暂存 / 未跟踪）才需要 add + commit。
+            let hasChanges = !status.entries.isEmpty
+            var didCommit = false
+            if hasChanges {
+                try await git.stageAll()
+                try await git.commit(message: message)
+                didCommit = true
+            }
+            // 刚产生新提交必然待推送；否则沿用上次刷新的未推送判断。
+            let needsPush = didCommit || hasUnpushed
+            if needsPush {
+                try await git.push()
+            }
+            await refreshAll()
+            switch (hasChanges, needsPush) {
+            case (true, true): showToast("已暂存、提交并推送", warning: false)
+            case (true, false): showToast("已暂存并提交", warning: false)
+            case (false, _): showToast("没有需要提交或推送的内容", warning: true)
+            }
+        } catch {
+            // push 被拒等同步类失败：先刷新再分流，冲突时不弹错误。
             await refreshAll()
             handleSyncFailureOrConflict(error)
         }

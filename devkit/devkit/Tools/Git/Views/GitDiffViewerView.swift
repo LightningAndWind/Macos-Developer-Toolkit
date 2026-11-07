@@ -74,7 +74,7 @@ struct GitFileInspectorView: View {
                     Text("-\(diff.removedCount)").font(.system(size: 11, weight: .semibold)).foregroundStyle(.red)
                 }
                 if let blocks = optionalConflictCount {
-                    chip("\(blocks) 处冲突", .red)
+                    chip(String(format: L("%@ 处冲突"), String(blocks)), .red)
                 }
             }
 
@@ -375,7 +375,7 @@ struct GitConflictContentView: View {
         return HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red).font(.system(size: 10))
-            Text("冲突 \(index + 1)/\(blocks.count) · \(block.leftLabel) ⇄ \(block.rightLabel)")
+            Text(String(format: L("冲突 %@/%@ · %@ ⇄ %@"), String(index + 1), String(blocks.count), block.leftLabel, block.rightLabel))
                 .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
             Button("保留我方") { resolve(blockIndex: index, keepOurSide: true) }

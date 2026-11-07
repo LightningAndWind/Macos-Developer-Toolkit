@@ -16,14 +16,27 @@ struct AppShellView: View {
     @AppStorage(AppPreferences.sidebarWidthKey)
     private var storedSidebarWidth: Double = Theme.Metrics.sidebarWidth
 
+    /// 侧栏是否收起成图标窄轨（Chrome 竖排标签样式，持久化）。
+    @AppStorage(AppPreferences.sidebarCollapsedKey)
+    private var sidebarCollapsed = false
+
+    /// 拖拽中的瞬时宽度（仅内存）：拖拽期间每帧只写这里，避免逐帧同步写 UserDefaults；
+    /// 落定（onCommit）时一次性持久化到 `storedSidebarWidth`。
+    @State private var dragWidth: CGFloat?
+
     var body: some View {
         @Bindable var appState = appState
         HStack(spacing: 0) {
-            TabBarView()
-                .frame(width: sidebarWidth)
-            SidebarResizeDivider(width: sidebarWidthBinding,
-                                range: Theme.Metrics.sidebarMinWidth...Theme.Metrics.sidebarMaxWidth,
-                                defaultWidth: Theme.Metrics.sidebarWidth)
+            // 宽度绑定在 SidebarColumn 内部读取：拖拽期间每帧变化只重绘侧栏列本身，
+            // 不触发本视图 body（sheets / 常驻标签 ZStack）逐帧重算，保证跟手。
+            SidebarColumn(width: sidebarWidthBinding, isCollapsed: sidebarCollapsed)
+            if !sidebarCollapsed {
+                // 收起后的窄轨没有可拖语义（避免「往左拖反而弹回最小宽度」的怪状态），隐藏分割线。
+                SidebarResizeDivider(width: sidebarWidthBinding,
+                                    range: Theme.Metrics.sidebarMinWidth...Theme.Metrics.sidebarMaxWidth,
+                                    defaultWidth: Theme.Metrics.sidebarWidth,
+                                    onCommit: commitSidebarWidth)
+            }
             contentArea
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -121,9 +134,15 @@ struct AppShellView: View {
         return CGFloat(min(max(storedSidebarWidth, lower), upper))
     }
 
-    /// 提供给分割线拖拽的绑定：读回限幅值，写入原始值。
+    /// 提供给分割线拖拽的绑定：拖拽中读到内存瞬时值（优先）/ 限幅持久值，写入只落内存态。
     private var sidebarWidthBinding: Binding<CGFloat> {
-        Binding(get: { sidebarWidth }, set: { storedSidebarWidth = Double($0) })
+        Binding(get: { dragWidth ?? sidebarWidth }, set: { dragWidth = $0 })
+    }
+
+    /// 拖拽落定 / 双击恢复：把瞬时宽度一次性持久化，退出拖拽态。
+    private func commitSidebarWidth() {
+        if let dragWidth { storedSidebarWidth = Double(dragWidth) }
+        dragWidth = nil
     }
 
     /// 内容区：已打开的标签常驻，切换仅改透明度/命中测试，不销毁重建视图树。
@@ -151,6 +170,20 @@ struct AppShellView: View {
     private func isTabShown(_ id: UUID) -> Bool {
         !appState.tabManager.isLauncherPresented
             && appState.tabManager.selectedTabID == id
+    }
+}
+
+/// 侧栏列：宽度绑定与收起态在本视图内部读取生效。
+///
+/// 收起时宽度固定为窄轨令牌（不消费绑定的拖拽值）；展开时消费绑定——
+/// 拖拽分割线的每帧写入只使本视图重绘，AppShellView 其余部分（sheets、常驻标签）不受牵动。
+private struct SidebarColumn: View {
+    @Binding var width: CGFloat
+    let isCollapsed: Bool
+
+    var body: some View {
+        TabBarView()
+            .frame(width: isCollapsed ? Theme.Metrics.sidebarRailWidth : width)
     }
 }
 

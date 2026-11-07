@@ -25,7 +25,7 @@ struct GitProcessOutput {
     /// 失败时的可读信息：优先 stderr，退回退出码。
     var errorText: String {
         let trimmed = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "命令退出码 \(exitCode)" : trimmed
+        return trimmed.isEmpty ? String(format: L("命令退出码 %@"), String(exitCode)) : trimmed
     }
 }
 
@@ -154,9 +154,9 @@ enum GitError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .launchFailed(let exe, let m): return "无法启动 \(exe)：\(m)"
+        case .launchFailed(let exe, let m): return String(format: L("无法启动 %@：%@"), String(exe), String(m))
         case .failed(let m): return m
-        case .notARepository(let p): return "不是有效的 Git 仓库：\(p)"
+        case .notARepository(let p): return String(format: L("不是有效的 Git 仓库：%@"), String(p))
         case .missing(let m): return m
         }
     }

@@ -182,6 +182,11 @@ struct GitRepository {
         try await require(["remote", "add", name, url])
     }
 
+    /// 删除远程：仅移除本地的远程名与地址登记，不动远程仓库本身。
+    func removeRemote(name: String) async throws {
+        try await require(["remote", "remove", name])
+    }
+
     func stashList() async throws -> [GitStashEntry] {
         let out = try await run(["stash", "list", "--format=%gd%x1f%s"])
         return out.stdout.split(separator: "\n").compactMap { line in
@@ -248,7 +253,7 @@ struct GitRepository {
         }
         if total > limit {
             lines.append(GitDiffLine(id: lines.count, kind: .meta,
-                                     text: "… 共 \(total) 个未跟踪文件，仅列出前 \(limit) 个",
+                                     text: String(format: L("… 共 %@ 个未跟踪文件，仅列出前 %@ 个"), String(total), String(limit)),
                                      oldLine: nil, newLine: nil))
         }
         return .unified(oldPath: "/dev/null", newPath: dir, lines: lines)
@@ -419,8 +424,18 @@ struct GitRepository {
         if let remote { try await require(["fetch", remote], onLine: onLine) }
         else { try await require(["fetch", "--all"], onLine: onLine) }
     }
-    func pull(onLine: (@MainActor (String) -> Void)? = nil) async throws {
-        try await require(["pull"], onLine: onLine)
+    /// 拉取：未指定远程走上游跟踪（`git pull`）；指定远程时显式拉取该远程的同名当前分支并合并。
+    func pull(remote: String? = nil, onLine: (@MainActor (String) -> Void)? = nil) async throws {
+        guard let remote else {
+            try await require(["pull"], onLine: onLine)
+            return
+        }
+        let current = try? await currentBranch()
+        if let current, !current.isEmpty {
+            try await require(["pull", remote, current], onLine: onLine)
+        } else {
+            try await require(["pull", remote], onLine: onLine)
+        }
     }
     func push(remote: String? = nil, branch: String? = nil, setUpstream: Bool = false,
               onLine: (@MainActor (String) -> Void)? = nil) async throws {
@@ -435,6 +450,15 @@ struct GitRepository {
                 upstream = true
                 branch = current
                 remote = await primaryRemote()
+            }
+        }
+        // 显式指定远程但未指定分支：推当前分支到该远程的同名分支；尚无上游时顺带建立跟踪，
+        // 让后续 pull / push 不必再配置。
+        else if remote != nil, branch == nil {
+            let current = try await currentBranch()
+            if let current, !current.isEmpty {
+                branch = current
+                if !(await hasUpstream()) { upstream = true }
             }
         }
         if upstream { args.append("--set-upstream") }

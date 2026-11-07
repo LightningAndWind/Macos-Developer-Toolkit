@@ -230,7 +230,7 @@ enum SFTPError: LocalizedError {
         case .serverError(_, let message):
             return message.isEmpty ? "SFTP 操作失败" : message
         case .unsupportedReply(let type):
-            return "收到不支持的数据包类型 \(type)"
+            return String(format: L("收到不支持的数据包类型 %@"), String(type))
         case .timedOut:
             return "SFTP 请求超时"
         }

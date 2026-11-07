@@ -39,11 +39,12 @@ final class Tab: Identifiable, Hashable {
         self.toolInstance = toolInstance
     }
 
-    /// 展示给标签栏的最终标题。
+    /// 展示给标签栏的最终标题。用户 / 工具动态标题保持原样（不作本地化），
+    /// 描述符默认标题（中文原文 key）与兜底文案经 L() 查表本地化。
     var displayTitle: String {
         if let customTitle, !customTitle.isEmpty { return customTitle }
         if let dyn = toolInstance?.dynamicTabTitle, !dyn.isEmpty { return dyn }
-        return ToolRegistry.shared.descriptor(for: toolID)?.title ?? "未知工具"
+        return L(ToolRegistry.shared.descriptor(for: toolID)?.title ?? "未知工具")
     }
 
     /// 是否有未保存的修改（驱动 `*` 标记）。读取工具实例脏标志；工具为 @Observable，改动会驱动视图刷新。

@@ -59,7 +59,7 @@ struct GitKeyManagerView: View {
             }
 
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L(errorMessage)).font(.caption).foregroundStyle(.red)
             }
 
             HStack {
@@ -203,7 +203,7 @@ struct GitKeyGenerateSheet: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red)
+                Text(L(errorMessage)).font(.caption).foregroundStyle(.red)
             }
 
             HStack {
