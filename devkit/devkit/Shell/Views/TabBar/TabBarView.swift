@@ -16,12 +16,11 @@ struct TabBarView: View {
 
     private var tabManager: TabManager { appState.tabManager }
 
-    /// 侧栏是否切换为超窄模式（与 AppShellView 共用同一持久化键，@AppStorage 自动同步）。
-    @AppStorage(AppPreferences.sidebarCollapsedKey) private var sidebarCollapsed = false
+    /// 侧栏是否切换为超窄模式（与 AppShellView 共用同一状态对象，天然同步）。
+    private var sidebarCollapsed: Bool { appState.sidebarWidthState.isCollapsed }
 
-    /// 展开态宽度档位（与 AppShellView 共用同一持久化键，@AppStorage 自动同步）。
-    @AppStorage(AppPreferences.sidebarWidthModeKey)
-    private var widthMode: Theme.SidebarWidthMode = .standard
+    /// 展开态宽度档位（与 AppShellView 共用同一状态对象，天然同步）。
+    private var widthMode: Theme.SidebarWidthMode { appState.sidebarWidthState.widthMode }
 
     /// 拖拽协调器：跨行共享的拖拽瞬时状态。
     @State private var drag = TabDragCoordinator()
@@ -95,26 +94,13 @@ struct TabBarView: View {
 
     /// 超窄态点击展开按钮一律回到「默认（标准）宽度」档，而不是恢复上次的加宽档：
     /// 回到一个确定、可预期的状态，比记住历史档位更直观。
+    /// 状态与宽度过渡都由共享状态对象在同一事务内落位，点击即刻起步。
     private func toggleCollapsed() {
-        withAnimation(Theme.Motion.content) {
-            if sidebarCollapsed {
-                // 先落档位再展开：超窄态下档位不影响生效宽度，可保证宽度从超窄一步到标准，
-                // 避免先按旧档位展开再缩回标准档的两段动画。
-                widthMode = .standard
-                sidebarCollapsed = false
-            } else {
-                sidebarCollapsed = true
-            }
-        }
+        appState.sidebarWidthState.toggleCollapsed()
     }
 
     private func selectWidthMode(_ mode: Theme.SidebarWidthMode) {
-        guard widthMode != mode || sidebarCollapsed else { return }
-        withAnimation(Theme.Motion.content) {
-            // 先落档位再退出超窄模式，保证宽度从超窄一步到目标档。
-            widthMode = mode
-            sidebarCollapsed = false
-        }
+        appState.sidebarWidthState.select(mode)
     }
 
     /// 竖向标签列表：用 `.scrollIndicators(.never)` 彻底移除原生滚动条

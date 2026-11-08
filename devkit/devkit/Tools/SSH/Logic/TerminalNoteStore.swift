@@ -14,8 +14,9 @@
 //  （分类选择器、所有行、TextEditor 的 AppKit 桥接）每敲一个字就重算一遍 body，
 //  这是编辑器粘滞的根因。
 //  现在把真实存储放到 @ObservationIgnored 的 storage 中，只有「列表组成变化」
-//  （载入 / 新建 / 删除 / 级联清理）才递增 revision；标题与内容写穿只静默更新
-//  storage + 落库，不广播。行视图的标题/内容本就由本地草稿驱动，因此显示不会滞后。
+//  （载入 / 新建 / 删除 / 级联清理）与「弹窗保存内容」才递增 revision；标题写穿
+//  （行内击键、高频）只静默更新 storage + 落库，不广播。行视图的标题由本地草稿驱动，
+//  因此显示不会滞后。
 //
 
 import Foundation
@@ -117,13 +118,18 @@ final class TerminalNoteStore {
         persist(storage[index])
     }
 
-    /// 改内容（编辑器每次变更即写穿，崩溃/关闭也不丢）。
+    /// 改内容（编辑弹窗「保存」时一次写入，崩溃/关闭也不丢）。
+    ///
+    /// 递增 revision 广播：内容编辑已从「行内击键写穿」改为「弹窗保存」（低频、一次一条），
+    /// 展开行的只读展示与执行按钮直接读 store 快照，必须靠广播才能拿到新内容 ——
+    /// 旧的不广播优化只服务于行内击键场景，现已不适用。
     func updateContent(id: UUID, content: String) {
         guard let index = storage.firstIndex(where: { $0.id == id }),
               storage[index].content != content else { return }
         storage[index].content = content
         storage[index].updatedAt = .now
         persist(storage[index])
+        revision += 1
     }
 
     func delete(id: UUID) {

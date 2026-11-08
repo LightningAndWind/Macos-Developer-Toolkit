@@ -30,6 +30,8 @@ final class AppState {
 
     private(set) var phase: AppPhase = .booting
     let tabManager: TabManager
+    /// 侧栏宽度状态：主界面与标签栏宽度按钮共用，保证点击与过渡同事务完成。
+    let sidebarWidthState = SidebarWidthState()
     let windowID: UUID = UUID()
 
     /// 关闭 tab 时若有未保存内容需要用户确认；M1 用最小编辑器：一次一个 pending。

@@ -60,6 +60,12 @@ struct DropdownPicker<Label: View>: View {
     var maxPanelWidth: CGFloat = DropdownPickerLayout.maxPanelWidth
     /// 展开态变化回调（调用方据此给所在行加 zIndex，避免面板被后续兄弟视图盖住）。
     var onPresentedChange: ((Bool) -> Void)?
+    /// 选中项的动作延后到弹层收起动画结束之后再执行（默认关闭）。
+    ///
+    /// 动作常伴随重活（如记事本切分类要重建整列列表）：与收起动画同帧发生时主线程被占满，
+    /// 收起动画的首帧被推迟、动画时钟在恢复后已走完 —— 弹层看起来就是卡一下然后瞬间消失。
+    /// 打开此项则先让弹层把动画跑完，再执行动作。
+    var defersActionUntilDismissed: Bool = false
     @ViewBuilder var label: (Bool) -> Label
 
     @State private var isHovering = false
@@ -74,6 +80,7 @@ struct DropdownPicker<Label: View>: View {
          alignsTrailing: Bool = false,
          maxPanelWidth: CGFloat = DropdownPickerLayout.maxPanelWidth,
          onPresentedChange: ((Bool) -> Void)? = nil,
+         defersActionUntilDismissed: Bool = false,
          @ViewBuilder label: @escaping (Bool) -> Label) {
         self.sections = [options]
         self.help = help
@@ -82,6 +89,7 @@ struct DropdownPicker<Label: View>: View {
         self.alignsTrailing = alignsTrailing
         self.maxPanelWidth = maxPanelWidth
         self.onPresentedChange = onPresentedChange
+        self.defersActionUntilDismissed = defersActionUntilDismissed
         self.label = label
     }
 
@@ -92,6 +100,7 @@ struct DropdownPicker<Label: View>: View {
          alignsTrailing: Bool = false,
          maxPanelWidth: CGFloat = DropdownPickerLayout.maxPanelWidth,
          onPresentedChange: ((Bool) -> Void)? = nil,
+         defersActionUntilDismissed: Bool = false,
          @ViewBuilder label: @escaping (Bool) -> Label) {
         self.sections = sections
         self.help = help
@@ -100,6 +109,7 @@ struct DropdownPicker<Label: View>: View {
         self.alignsTrailing = alignsTrailing
         self.maxPanelWidth = maxPanelWidth
         self.onPresentedChange = onPresentedChange
+        self.defersActionUntilDismissed = defersActionUntilDismissed
         self.label = label
     }
 
@@ -170,11 +180,27 @@ struct DropdownPicker<Label: View>: View {
     private func rowOrDivider(_ option: DropdownOption) -> some View {
         if let title = option.title {
             DropdownPickerItem(option: option, panelWidth: panelWidth) {
-                option.action?()
-                close()
+                select(option)
             }
         } else {
             dividerRow
+        }
+    }
+
+    /// 选中一项。
+    ///
+    /// 默认先执行动作再收起弹层；`defersActionUntilDismissed` 为真时改为先收起、
+    /// 等收起动画跑完再执行动作（见该属性的说明）。
+    private func select(_ option: DropdownOption) {
+        guard defersActionUntilDismissed else {
+            option.action?()
+            close()
+            return
+        }
+        close()
+        Task { @MainActor in
+            try? await Task.sleep(for: DropdownPickerLayout.dismissDelay)
+            option.action?()
         }
     }
 

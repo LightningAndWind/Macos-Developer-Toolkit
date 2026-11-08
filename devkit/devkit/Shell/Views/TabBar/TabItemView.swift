@@ -22,6 +22,8 @@ struct TabItemView: View {
     @State private var draftTitle = ""
     /// 手动双击判定：记录上一次单击时间，避免用 count:2 手势拖慢单击。
     @State private var lastTapDate: Date?
+    /// 行内编辑期间的「点击框外失焦」监听（见 OutsideClickFocusResigner）。
+    @State private var outsideClickFocusGuard = OutsideClickFocusResigner()
     @FocusState private var titleFieldFocused: Bool
 
     private var isSelected: Bool { appState.tabManager.selectedTabID == tab.id }
@@ -73,6 +75,18 @@ struct TabItemView: View {
                 commitRename()
             }
         }
+        // macOS 只在点击目标可接受焦点时才转移第一响应者，点在其他标签行 /
+        // 侧栏空白 / 工具页背景上时输入框不会失焦，上面的提交永远不会触发。
+        // 编辑期间挂窗口级鼠标监听：点击落在编辑框外时让焦点退位，
+        // 仍走同一条失焦提交路径；事件原样放行，点击本身的语义不受影响。
+        .onChange(of: isEditingTitle) { _, editing in
+            if editing {
+                outsideClickFocusGuard.start()
+            } else {
+                outsideClickFocusGuard.stop()
+            }
+        }
+        .onDisappear { outsideClickFocusGuard.stop() }
         .animation(Theme.Motion.micro, value: isSelected)
         .animation(Theme.Motion.micro, value: isHovering)
         .contextMenu { menu }

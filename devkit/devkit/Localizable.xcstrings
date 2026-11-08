@@ -2403,23 +2403,6 @@
         }
       }
     },
-    "分类" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Category"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "分类"
-          }
-        }
-      }
-    },
     "分组" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2503,7 +2486,37 @@
       }
     },
     "切换到超窄模式" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to ultra-narrow mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到超窄模式"
+          }
+        }
+      }
+    },
+    "切换记事分类（点击选择 SSH 记录）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch note category (click to pick an SSH profile)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换记事分类（点击选择 SSH 记录）"
+          }
+        }
+      }
     },
     "创建" : {
       "localizations" : {
@@ -2995,6 +3008,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新工作区"
+          }
+        }
+      }
+    },
+    "加宽一倍（2×）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double width (2×)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加宽一倍（2×）"
+          }
+        }
+      }
+    },
+    "加宽一半（1.5×）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widen by half (1.5×)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加宽一半（1.5×）"
           }
         }
       }
@@ -3757,6 +3804,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在「%@」下新建文件夹…"
+          }
+        }
+      }
+    },
+    "在弹窗中编辑内容" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit content in a dialog"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在弹窗中编辑内容"
           }
         }
       }
@@ -5595,22 +5658,6 @@
         }
       }
     },
-    "恢复大小" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Restore size"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "恢复大小"
-          }
-        }
-      }
-    },
     "意外的关键字" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5977,25 +6024,21 @@
         }
       }
     },
-    "拖动调整侧栏宽度，双击恢复默认" : {
-      "extractionState" : "stale",
+    "拖动调整宽度，双击恢复默认" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drag to resize the sidebar; double-click to reset"
+            "value" : "Drag to resize, double-click to reset"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拖动调整侧栏宽度，双击恢复默认"
+            "value" : "拖动调整宽度，双击恢复默认"
           }
         }
       }
-    },
-    "拖动调整宽度，双击恢复默认" : {
-
     },
     "拖动调整请求区与响应区的高度，双击恢复默认" : {
       "localizations" : {
@@ -6304,39 +6347,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "收到无法解析的 SFTP 数据包"
-          }
-        }
-      }
-    },
-    "收起侧栏" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Collapse sidebar"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "收起侧栏"
-          }
-        }
-      }
-    },
-    "放大编辑" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enlarge editor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "放大编辑"
           }
         }
       }
@@ -7432,6 +7442,22 @@
         }
       }
     },
+    "暂无内容" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No content yet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无内容"
+          }
+        }
+      }
+    },
     "暂无历史" : {
       "localizations" : {
         "en" : {
@@ -7494,23 +7520,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暂无连接"
-          }
-        }
-      }
-    },
-    "更多操作" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "More actions"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更多操作"
           }
         }
       }
@@ -8164,6 +8173,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标准 JSON 不允许 // 或 /* */ 注释，请删除"
+          }
+        }
+      }
+    },
+    "标准宽度（1×）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard width (1×)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标准宽度（1×）"
           }
         }
       }
@@ -9763,6 +9789,22 @@
         }
       }
     },
+    "编辑" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑"
+          }
+        }
+      }
+    },
     "编辑 / 重新绑定密钥…" : {
       "localizations" : {
         "en" : {
@@ -9873,6 +9915,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑本地终端"
+          }
+        }
+      }
+    },
+    "编辑记事内容" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Note Content"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑记事内容"
           }
         }
       }
@@ -11484,6 +11542,23 @@
         }
       }
     },
+    "选择数据库连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose database connection"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择数据库连接"
+          }
+        }
+      }
+    },
     "选择父目录" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11563,6 +11638,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择私钥"
+          }
+        }
+      }
+    },
+    "选择缩进宽度" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose indent width"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择缩进宽度"
           }
         }
       }
@@ -11678,6 +11770,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名"
+          }
+        }
+      }
+    },
+    "重命名 / 删除" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename / Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名 / 删除"
           }
         }
       }

@@ -18,16 +18,11 @@ struct SSHToolView: View {
     @State private var terminalScroll = TerminalScrollModel()
     /// 右侧记事本面板展开态（开关在右缘竖向工具条上）。
     @State private var showNotepad = false
-    /// 记事本编辑器放大态（面板级：放大时面板整体加宽，状态在此驱动宽度）。
-    @State private var notepadEnlarged = false
 
-    /// 面板完全滑出窗口右缘所需的最小位移（随放大态变化）：
-    /// 面板宽（常规 256 / 放大 420）+ 右侧留白（工具条 34 + 间距 8）+ 内容外边距 10 + 阴影余量。
+    /// 面板完全滑出窗口右缘所需的最小位移：
+    /// 面板宽（256）+ 右侧留白（工具条 34 + 间距 8）+ 内容外边距 10 + 阴影余量。
     private var notepadExitOffset: CGFloat {
-        let panelWidth = notepadEnlarged
-            ? Theme.Metrics.notepadPanelExpandedWidth
-            : Theme.Metrics.notepadPanelWidth
-        return panelWidth + Theme.Metrics.sideStripWidth
+        Theme.Metrics.notepadPanelWidth + Theme.Metrics.sideStripWidth
             + Theme.Metrics.terminalSideGap + Theme.Metrics.terminalContentInset + 16
     }
 
@@ -46,17 +41,11 @@ struct SSHToolView: View {
                 sideStrip
             }
             TerminalNotePadPanel(inputHub: tool.terminalInput,
-                                 currentProfileID: tool.activeProfile?.id,
-                                 editorEnlarged: notepadEnlarged,
-                                 onToggleEditorEnlarged: {
-                                     withAnimation(Theme.Motion.content) { notepadEnlarged.toggle() }
-                                 })
-                // 面板自定义 Equatable：本视图每轮 body 都会新建上面的回调闭包，
+                                 currentProfileID: tool.activeProfile?.id)
+                // 面板自定义 Equatable：本视图每轮 body 都会重新构造本视图的入参，
                 // 不显式忽略会让终端侧任何重绘都传染成面板 body 重算。
                 .equatable()
-                .frame(width: notepadEnlarged
-                       ? Theme.Metrics.notepadPanelExpandedWidth
-                       : Theme.Metrics.notepadPanelWidth)
+                .frame(width: Theme.Metrics.notepadPanelWidth)
                 // 分类下拉是自绘弹层，要溢出面板边界；只让背景板裁圆角，内容不裁。
                 .terminalCardSurface(clipsContent: false)
                 .padding(.trailing, Theme.Metrics.sideStripWidth + Theme.Metrics.terminalSideGap)
@@ -65,7 +54,7 @@ struct SSHToolView: View {
                 .accessibilityHidden(!showNotepad)
         }
         // 这里刻意不挂 `.animation(_:value:)`：它会把整个 ZStack 子树（含 AppKit
-        // 终端容器与常驻记事本面板）纳入隐式动画作用域。开关与放大两处已经显式
+        // 终端容器与常驻记事本面板）纳入隐式动画作用域。面板开关一处已经显式
         // `withAnimation`，事务只覆盖真正变化的那一次，作用域更小也更可预测。
         // 外部边距：终端卡片与窗口四边都留白。
         .padding(Theme.Metrics.terminalContentInset)

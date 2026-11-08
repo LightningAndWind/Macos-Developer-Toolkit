@@ -530,7 +530,14 @@ enum DebugSelfCheck {
         expect(store.notes(inProfile: UUID()).isEmpty, "其他记录的分类应为空")
 
         store.rename(id: a.id, title: "重启容器")
+        // 内容编辑已改为弹窗保存（低频）：递增 revision 广播，展开行的只读展示才拿得到新内容。
+        let revisionBefore = store.revision
         store.updateContent(id: a.id, content: "docker restart web")
+        expect(store.revision == revisionBefore + 1,
+               "弹窗保存内容应递增 revision 广播（展开行只读展示与执行按钮直接读 store 快照）")
+        store.updateContent(id: a.id, content: "docker restart web")
+        expect(store.revision == revisionBefore + 1,
+               "内容未变化时不应递增 revision（无意义广播会牵动整个面板重算）")
         let renamed = store.notes.first { $0.id == a.id }
         expect(renamed?.title == "重启容器" && renamed?.content == "docker restart web",
                "改名与改内容应写穿到列表（reload 漏调会让面板看不到变化）")

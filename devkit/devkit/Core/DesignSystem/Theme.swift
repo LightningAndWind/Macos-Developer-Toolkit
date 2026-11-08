@@ -84,12 +84,8 @@ enum Theme {
         static let terminalScrollbackLines: Int = 3000
         /// 终端记事本右侧面板的固定宽度。
         static let notepadPanelWidth: CGFloat = 256
-        /// 记事本面板放大宽度（放大编辑时列表与编辑栏一起加宽）。
-        static let notepadPanelExpandedWidth: CGFloat = 420
-        /// 记事本内容编辑器常规高度。
+        /// 记事本展开行的内容只读展示区高度（编辑走弹窗，不再有放大态）。
         static let notepadEditorHeight: CGFloat = 92
-        /// 记事本内容编辑器放大高度。
-        static let notepadEditorExpandedHeight: CGFloat = 220
         /// 终端卡片与右侧面板 / 竖向工具条之间的间距（与横幅-终端间隙同视觉层级）。
         static let terminalSideGap: CGFloat = 8
         /// 右缘竖向工具条（类 IDE stripe）的宽度。
