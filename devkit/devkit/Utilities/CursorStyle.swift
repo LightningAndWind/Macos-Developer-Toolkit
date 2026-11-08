@@ -11,9 +11,10 @@ import SwiftUI
 
 extension View {
     /// 鼠标悬停期间显示手指光标，离开后恢复。用于按钮、菜单、可点击行等。
-    func pointingHandOnHover() -> some View {
+    /// `enabled` 为 false 时不切手指（保持箭头），用于禁用态行。
+    func pointingHandOnHover(enabled: Bool = true) -> some View {
         onHover { hovering in
-            if hovering {
+            if hovering && enabled {
                 NSCursor.pointingHand.push()
             } else {
                 NSCursor.pop()

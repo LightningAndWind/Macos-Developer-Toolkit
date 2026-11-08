@@ -15,14 +15,12 @@ struct GitChangesSection: View {
     @State private var amend = false
     @State private var confirmDiscardAll = false
     /// 文件列表宽度（可拖拽，持久化）；预览区占据其余全部宽度，保证编辑区足够大。
-    /// UserDefaults 存 Double，使用时桥接为 CGFloat（与侧栏宽度同模式）。
+    /// `storedListWidth` 只在拖拽**落定**时写一次：旧实现的 Binding 每帧直接写
+    /// UserDefaults，同步 I/O 会让拖拽明显掉帧。
     @AppStorage("git.changes.listWidth") private var storedListWidth: Double = 240
-
-    private var listWidth: CGFloat { CGFloat(storedListWidth) }
-    private var listWidthBinding: Binding<CGFloat> {
-        Binding(get: { CGFloat(storedListWidth) },
-                set: { storedListWidth = Double($0) })
-    }
+    @State private var listSizing = ColumnSizing(defaultsKey: "git.changes.listWidth",
+                                                 defaultWidth: 240,
+                                                 range: 150...420)
 
     private var hasStaged: Bool { !tool.status.staged.isEmpty }
 
@@ -45,34 +43,37 @@ struct GitChangesSection: View {
             Divider()
 
             HStack(spacing: 0) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        if !tool.status.conflicted.isEmpty {
-                            fileGroup("冲突", color: .red) {
-                                ForEach(tool.status.conflicted) { fileRow($0, kind: .conflict) }
+                // 宽度读取隔离在这个子视图里：拖拽每帧只让它重排，宿主 body
+                // （三棵文件树 + 提交栏）不参与逐帧重算。
+                ChangesListColumn(sizing: listSizing, isFullWidth: tool.selectedFilePath == nil) {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            if !tool.status.conflicted.isEmpty {
+                                fileGroup("冲突", color: .red) {
+                                    ForEach(tool.status.conflicted) { fileRow($0, kind: .conflict) }
+                                }
+                            }
+                            unstagedGroup
+                            stagedGroup
+                            unpushedGroup
+
+                            if isEmpty {
+                                Label("工作区干净，且无待推送提交", systemImage: "checkmark.circle")
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 24)
+                                    .frame(maxWidth: .infinity)
                             }
                         }
-                        unstagedGroup
-                        stagedGroup
-                        unpushedGroup
-
-                        if isEmpty {
-                            Label("工作区干净，且无待推送提交", systemImage: "checkmark.circle")
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 24)
-                                .frame(maxWidth: .infinity)
-                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .scrollIndicators(.never)
+                    .scrollIndicatorBar()
                 }
-                .scrollIndicators(.never)
-                .scrollIndicatorBar()
-                .frame(maxWidth: tool.selectedFilePath == nil ? .infinity : listWidth)
 
                 if tool.selectedFilePath != nil {
                     // 可拖拽分割线：把宽度让给右侧预览区，双击恢复默认。
-                    SidebarResizeDivider(width: listWidthBinding, range: 150...420, defaultWidth: 240)
+                    SidebarResizeDivider(sizing: listSizing, onCommit: commitListWidth)
                     GitFileInspectorView(tool: tool)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -262,5 +263,30 @@ struct GitChangesSection: View {
             message = ""
             amend = false
         }
+    }
+
+    /// 拖拽落定 / 双击恢复：一次写入 UserDefaults，退出拖拽态。
+    private func commitListWidth() {
+        let finalWidth = listSizing.settle()
+        if abs(storedListWidth - Double(finalWidth)) > 0.5 {
+            storedListWidth = Double(finalWidth)
+        }
+    }
+}
+
+/// 变更列表列：唯一读取拖拽瞬时宽度的视图，让每帧失效止步于此。
+private struct ChangesListColumn<Content: View>: View {
+    let sizing: ColumnSizing
+    let isFullWidth: Bool
+    let content: Content
+
+    init(sizing: ColumnSizing, isFullWidth: Bool, @ViewBuilder content: () -> Content) {
+        self.sizing = sizing
+        self.isFullWidth = isFullWidth
+        self.content = content()
+    }
+
+    var body: some View {
+        content.frame(maxWidth: isFullWidth ? .infinity : sizing.currentWidth)
     }
 }

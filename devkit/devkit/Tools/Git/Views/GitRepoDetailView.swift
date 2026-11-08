@@ -22,7 +22,9 @@ struct GitRepoDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            // zIndex(1)：横幅内的下拉面板要溢出横幅下沿，须盖过其后渲染的分区切换 / 分区内容。
             banner
+                .zIndex(1)
             sectionSwitcher
             Divider()
             sectionContent
@@ -96,6 +98,9 @@ struct GitRepoDetailView: View {
     private var banner: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
+                // zIndex(1)：分支下拉面板会溢出这一行，盖过排在其后的路径行 / 远程行。
+                // 注意 zIndex 只在**同容器直接兄弟**间生效——分支行外还包着一层 HStack，
+                // 抬升必须加在这层 HStack 上（加在 branchIndicator 上管不到路径/远程行）。
                 HStack(spacing: 8) {
                     branchIndicator
                     if tool.status.ahead > 0 { chip("↑\(tool.status.ahead)", .green) }
@@ -112,6 +117,7 @@ struct GitRepoDetailView: View {
                         .help("点击查看冲突文件")
                     }
                 }
+                .zIndex(1)
                 if let repo = tool.selectedRepo {
                     Text(repo.path)
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
@@ -140,16 +146,16 @@ struct GitRepoDetailView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.5)))
     }
 
-    /// 顶部当前分支：悬停高亮的按钮，点击弹出本地分支列表，点选其他分支即切换（勾选当前项）。
+    /// 顶部当前分支：悬停高亮的下拉选择框，点开本地分支列表，点选其他分支即切换（勾选当前项）。
     /// 分支尚未加载或操作进行中时退回纯展示/禁用。
     @ViewBuilder
     private var branchIndicator: some View {
         if tool.localBranches.isEmpty {
             branchLabel
         } else {
-            GitBannerMenu(
+            DropdownPicker(
                 options: tool.localBranches.map { branch in
-                    GitBannerMenuOption(
+                    DropdownOption(
                         title: branch.name,
                         checked: branch.isCurrent,
                         action: branch.isCurrent ? nil : { Task { await tool.checkout(branch: branch.name) } })
@@ -188,17 +194,17 @@ struct GitRepoDetailView: View {
         .disabled(disabled)
     }
 
-    /// 当前仓库绑定密钥：悬停加深的胶囊按钮，点击弹出列表直接改绑（与「新增仓库」不同，仅换密钥）。
+    /// 当前仓库绑定密钥：悬停加深的胶囊下拉选择框，点开列表直接改绑（与「新增仓库」不同，仅换密钥）。
     @ViewBuilder
     private var keyIndicator: some View {
         if let repo = tool.selectedRepo {
-            GitBannerMenu(
+            DropdownPicker(
                 sections: [
-                    [GitBannerMenuOption(title: "不绑定（系统默认）",
-                                         checked: repo.keyID == nil,
-                                         action: { tool.rebindKey(to: nil) })],
+                    [DropdownOption(title: "不绑定（系统默认）",
+                                    checked: repo.keyID == nil,
+                                    action: { tool.rebindKey(to: nil) })],
                     keys.map { key in
-                        GitBannerMenuOption(
+                        DropdownOption(
                             title: "\(key.name) · \(key.algorithm.label)",
                             checked: repo.keyID == key.id,
                             action: { tool.rebindKey(to: key.id) })
@@ -206,7 +212,9 @@ struct GitRepoDetailView: View {
                 ],
                 help: "绑定密钥（点击改绑）",
                 isDisabled: tool.isBusy,
-                showsHoverBackground: false
+                showsHoverBackground: false,
+                // 触发器贴近窗口右缘：面板沿其右缘向左展开。
+                alignsTrailing: true
             ) { hovering in
                 if let keyID = repo.keyID, let key = GitKeyStore.load(id: keyID) {
                     HStack(spacing: 4) {
@@ -231,7 +239,7 @@ struct GitRepoDetailView: View {
         }
     }
 
-    /// 远程地址行：点击弹出远程列表选定「当前使用的远程」（fetch / 拉取 / 推送作用于它），
+    /// 远程地址行：下拉选择框选定「当前使用的远程」（fetch / 拉取 / 推送作用于它），
     /// 铅笔按钮弹出管理抽屉（增删 / 改地址）；未配置时给出引导文案。
     @ViewBuilder
     private var remoteRow: some View {
@@ -243,9 +251,9 @@ struct GitRepoDetailView: View {
                 Text("未配置远程地址")
                     .font(.system(size: 10)).foregroundStyle(.tertiary)
             } else {
-                GitBannerMenu(
+                DropdownPicker(
                     options: tool.remotes.map { remote in
-                        GitBannerMenuOption(
+                        DropdownOption(
                             title: "\(remote.name) · \(remote.displayURL)",
                             checked: tool.effectiveRemote?.name == remote.name,
                             action: { tool.selectRemote(name: remote.name) })
@@ -307,6 +315,37 @@ struct GitRepoDetailView: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(color.opacity(0.18)))
             .foregroundStyle(color)
+    }
+}
+
+/// 横幅小图标按钮（如远程行的铅笔）：与 DropdownPicker 触发器同款悬停高亮。
+struct BannerIconButton: View {
+    let symbol: String
+    var help: String = ""
+    var isDisabled: Bool = false
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10))
+                .foregroundStyle(isHovering ? Color.primary : Color.secondary)
+                .frame(width: 20, height: 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isHovering ? Theme.Palette.hoverOverlay : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
+        .onHover { isHovering = $0 }
+        .animation(Theme.Motion.micro, value: isHovering)
+        .pointingHandOnHover()
+        .help(help)
     }
 }
 

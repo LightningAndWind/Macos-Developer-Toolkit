@@ -180,11 +180,25 @@ final class TerminalScrollerMonitor: NSObject, @unchecked Sendable {
 
 extension View {
     /// 在终端区右侧叠加与 sftp 同款的悬浮滚动指示条；仅当终端有回滚溢出时显示。
+    ///
+    /// 模型读取必须隔离在下面这个小视图里：若在宿主 body 作用域直接读 `model.show` 等
+    /// @Observable 属性，宿主（SSHToolView）会被登记为观察者 —— 终端每次滚动/输出
+    /// （scroller KVO → 模型写入）都会整树重渲染 SSHToolView，连带记事本面板逐帧
+    /// 重算（含 SQLite 查询）与终端 representable 的 updateNSView，是多个卡顿的共同根源。
     func terminalScrollIndicator(_ model: TerminalScrollModel) -> some View {
         overlay(alignment: .trailing) {
-            if model.show {
-                TerminalScrollIndicator(position: model.position, knob: model.knob)
-            }
+            TerminalScrollIndicatorOverlay(model: model)
+        }
+    }
+}
+
+/// 指示条挂载点：唯一观察 `TerminalScrollModel` 的最小视图。
+private struct TerminalScrollIndicatorOverlay: View {
+    let model: TerminalScrollModel
+
+    var body: some View {
+        if model.show {
+            TerminalScrollIndicator(position: model.position, knob: model.knob)
         }
     }
 }

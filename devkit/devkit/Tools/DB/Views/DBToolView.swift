@@ -17,7 +17,9 @@ struct DBToolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // zIndex(1)：连接下拉面板要溢出顶栏下沿，须盖过其后渲染的输出区。
             toolbar
+                .zIndex(1)
             Divider()
             outputArea
         }
@@ -33,24 +35,24 @@ struct DBToolView: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            Menu {
-                if tool.connections.isEmpty {
-                    Text("暂无连接").font(.caption)
-                }
-                ForEach(tool.connections) { connection in
-                    Button {
-                        tool.selectedConnectionID = connection.id
-                    } label: {
-                        HStack {
-                            Text(connection.name)
-                            Spacer()
-                            Text(connection.kind.rawValue)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+            DropdownPicker(
+                options: {
+                    var rows: [DropdownOption] = []
+                    if tool.connections.isEmpty {
+                        rows.append(DropdownOption(title: "暂无连接"))
                     }
-                }
-            } label: {
+                    rows.append(contentsOf: tool.connections.map { connection in
+                        DropdownOption(
+                            title: connection.name,
+                            detail: connection.kind.rawValue,
+                            checked: tool.selectedConnectionID == connection.id,
+                            action: { tool.selectedConnectionID = connection.id })
+                    })
+                    return rows
+                }(),
+                help: "选择数据库连接",
+                showsHoverBackground: false
+            ) { hovering in
                 HStack(spacing: 6) {
                     Image(systemName: tool.selectedConnection?.kind == .redis ? "bolt.horizontal.circle" : "cylinder.and.ellipse")
                         .font(.system(size: 11))
@@ -62,10 +64,10 @@ struct DBToolView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 10)
-                .frame(height: 26)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+                .frame(height: 22)
+                .background(RoundedRectangle(cornerRadius: 6)
+                    .fill(hovering ? Color.primary.opacity(0.09) : Color.primary.opacity(0.05)))
             }
-            .fixedSize()
 
             Text(tool.selectedConnection?.displaySummary ?? "")
                 .font(.caption)

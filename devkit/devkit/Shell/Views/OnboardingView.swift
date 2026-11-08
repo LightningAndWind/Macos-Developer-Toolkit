@@ -180,8 +180,10 @@ struct VisualEffectBackground: NSViewRepresentable {
         return v
     }
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
+        // 只在真的变化时写：宿主视图任何一次重算都会走到这里，无条件赋值会让
+        // NSVisualEffectView 反复失效重绘（侧栏拖拽时尤其明显）。
+        if nsView.material != material { nsView.material = material }
+        if nsView.blendingMode != blendingMode { nsView.blendingMode = blendingMode }
     }
 }
 

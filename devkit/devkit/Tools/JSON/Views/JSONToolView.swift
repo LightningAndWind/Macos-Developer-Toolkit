@@ -20,7 +20,9 @@ struct JSONToolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // zIndex(1)：缩进下拉面板要溢出工具栏下沿，须盖过其后渲染的内容区。
             toolbar
+                .zIndex(1)
             Divider()
             content
             Divider()
@@ -65,24 +67,17 @@ struct JSONToolView: View {
     }
 
     private var indentMenu: some View {
-        Menu {
-            ForEach(JSONIndent.allCases, id: \.self) { option in
-                Button {
-                    tool.indent = option
-                } label: {
-                    if tool.indent == option {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
-                    }
-                }
-            }
-        } label: {
+        DropdownPicker(
+            options: JSONIndent.allCases.map { option in
+                DropdownOption(title: option.label,
+                               checked: tool.indent == option,
+                               action: { tool.indent = option })
+            },
+            help: "选择缩进宽度"
+        ) { _ in
             Label(String(format: L("缩进 %@"), String(tool.indent.label)), systemImage: "shift")
+                .font(.system(size: 12))
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.visible)
-        .fixedSize()
         .pointingHandOnHover()
     }
 

@@ -14,10 +14,8 @@ struct TabItemView: View {
     let tab: Tab
     /// 跨行共享的拖拽协调器（由 TabBarView 注入）。
     let coordinator: TabDragCoordinator
-    /// 各行的实时帧快照来源（由 TabBarView 注入）。
-    let liveFrames: [UUID: CGRect]
-    /// 侧栏收起成图标窄轨：只显示居中图标（标题走 tooltip，关闭走右键菜单）。
-    var isRail: Bool = false
+    /// 各行的实时位置快照来源（由 TabBarView 注入；只含 origin，见 TabRowFrames）。
+    let liveFrames: [UUID: CGPoint]
 
     @State private var isHovering = false
     @State private var isEditingTitle = false
@@ -40,31 +38,28 @@ struct TabItemView: View {
     }
 
     var body: some View {
-        HStack(spacing: isRail ? 0 : Theme.Metrics.tabInnerSpacing) {
+        HStack(spacing: Theme.Metrics.tabInnerSpacing) {
             if let groupColor {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(groupColor)
-                    .frame(width: Theme.Metrics.groupAccentWidth)
+                accentBar(groupColor)
             }
             Image(systemName: symbolName)
                 .font(Theme.Fonts.tabSymbol)
                 .foregroundStyle(.secondary)
                 .frame(width: 14)
-            if !isRail {
-                titleView
-            }
+            titleView
         }
-        .padding(.horizontal, isRail ? 0 : Theme.Metrics.tabHPadding)
+        .padding(.horizontal, Theme.Metrics.tabHPadding)
         .frame(height: Theme.Metrics.tabRowHeight)
-        .frame(maxWidth: .infinity, alignment: isRail ? .center : .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 超窄模式下可用宽度小于标题理想宽度时，兜底裁掉任何横向溢出，杜绝内容露到窗口左缘。
+        .clipped()
         .contentShape(Rectangle())
         .background(backgroundShape)
         .overlay(borderStroke)
         // 统一手势作用于行内容；关闭按钮随后叠在其上，独立命中，互不干扰。
         .gesture(rowGesture)
         .overlay(alignment: .trailing) {
-            // 窄轨放不下关闭按钮：关闭走右键菜单 / ⌘W。
-            if !isRail && (isHovering || isSelected) {
+            if isHovering || isSelected {
                 closeButton
                     .padding(.trailing, Theme.Metrics.tabHPadding - 3)
             }
@@ -157,6 +152,13 @@ struct TabItemView: View {
     }
 
     // MARK: - Sub views
+
+    /// 分组归属色条：宽度固定，高度随所在容器撑满。
+    private func accentBar(_ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(color)
+            .frame(width: Theme.Metrics.groupAccentWidth)
+    }
 
     @ViewBuilder
     private var titleView: some View {

@@ -90,6 +90,8 @@ struct SettingsView: View {
     // Git 仓库与密钥（集中管理：改绑密钥 / 删除登记）。
     @State private var gitRepos: [GitRepo] = []
     @State private var gitKeys: [GitKey] = []
+    /// 正展开「改绑密钥」下拉的仓库行：滚动列表内后续行 z 序更高会盖住面板，展开行须抬升。
+    @State private var openKeyMenuRepoID: UUID?
 
     // 集合树（无搜索词时展示层级）；搜索时退回下方扁平过滤列表。
     @State private var httpTree: [SettingsTreeNode] = []
@@ -605,7 +607,10 @@ struct SettingsView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(gitRepos) { repo in gitRepoRow(repo) }
+                        ForEach(gitRepos) { repo in
+                            gitRepoRow(repo)
+                                .zIndex(openKeyMenuRepoID == repo.id ? 2 : 0)
+                        }
                     }
                     .padding(.bottom, 4)
                 }
@@ -629,23 +634,32 @@ struct SettingsView: View {
                 }
             }
             Spacer(minLength: 8)
-            // 改绑密钥（仅换密钥，与新增仓库不同）。
-            Menu {
-                Button { rebindGitKey(repo, to: nil) } label: {
-                    gitKeyLabel(L("不绑定（系统默认）"), checked: repo.keyID == nil)
-                }
-                if !gitKeys.isEmpty { Divider() }
-                ForEach(gitKeys) { key in
-                    Button { rebindGitKey(repo, to: key.id) } label: {
-                        gitKeyLabel("\(key.name) · \(key.algorithm.label)", checked: repo.keyID == key.id)
+            // 改绑密钥（仅换密钥，与新增仓库不同）。滚动列表内下拉面板溢出本行，
+            // 后续行会盖住面板：展开的行用 zIndex 抬升（见 openKeyMenuRepoID）。
+            DropdownPicker(
+                sections: [
+                    [DropdownOption(title: L("不绑定（系统默认）"),
+                                    checked: repo.keyID == nil,
+                                    action: { rebindGitKey(repo, to: nil) })],
+                    gitKeys.map { key in
+                        DropdownOption(title: "\(key.name) · \(key.algorithm.label)",
+                                       checked: repo.keyID == key.id,
+                                       action: { rebindGitKey(repo, to: key.id) })
                     }
+                ],
+                showsHoverBackground: false,
+                alignsTrailing: true,
+                onPresentedChange: { open in openKeyMenuRepoID = open ? repo.id : nil }
+            ) { hovering in
+                HStack(spacing: 4) {
+                    Label(currentKeyName(for: repo), systemImage: "key")
+                        .font(.system(size: 12))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
-            } label: {
-                Label(currentKeyName(for: repo), systemImage: "key")
+                .foregroundStyle(hovering ? Color.primary : Color.secondary)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.visible)
-            .fixedSize()
             // 删除登记。
             Button(role: .destructive) {
                 pendingDeletion = .gitRepo(id: repo.id, name: repo.alias)
@@ -659,10 +673,6 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.03)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.5)))
-    }
-
-    private func gitKeyLabel(_ text: String, checked: Bool) -> some View {
-        HStack { Text(text); Spacer(); if checked { Image(systemName: "checkmark") } }
     }
 
     private func currentKeyName(for repo: GitRepo) -> String {

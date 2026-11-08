@@ -459,7 +459,10 @@ enum DebugSelfCheck {
         expect(await tool.addRemote(name: "origin", url: bare1) == nil, "添加 origin 应成功")
         expect(await tool.addRemote(name: "mirror", url: bare2) == nil, "添加 mirror 应成功")
         let dup = await tool.addRemote(name: "origin", url: bare2)
-        expect(dup != nil && dup!.contains("已存在"), "同名添加应被拒绝并给出指引（实际：\(dup ?? "nil")）")
+        // 断言不绑定语言：自检可能跑在英文环境（L() 查英文目录），指引中英文都回显远程名，
+        // 且都不含 git 原始报错的 "fatal:" 前缀 —— 以此区分「应用指引」与「git 原样透传」。
+        expect(dup != nil && dup!.contains("origin") && !dup!.contains("fatal:"),
+               "同名添加应被拒绝并给出指引（实际：\(dup ?? "nil")）")
         expect(await tool.addRemote(name: "a b", url: bare2) != nil, "含空格的名称应被拒绝")
         expect(tool.remotes.map(\.name).sorted() == ["mirror", "origin"],
                "远程列表应恰为 mirror/origin（实际：\(tool.remotes.map(\.name))）")
@@ -495,10 +498,12 @@ enum DebugSelfCheck {
 
     /// 终端记事本存储：按 SSH 记录分类的建 / 改 / 删 / 过滤 / 排序完整回路（记事本面板的真实数据源）。
     ///
-    /// 要害一：面板直接读 `store.notes`（@Observable），任何写入后 `reload()` 漏调都会
-    /// 表现为「操作成功但列表不动」。要害二：列表按 created_at 倒序 —— 新记事必须在顶部，
-    /// 且改名 / 改内容（会更新 updated_at）**不打乱**既有位置。要害三：分类 ——
-    /// `notes(inProfile:)` 只过滤不混淆；记录删除必须级联清掉其记事（否则面板出现空分类）。
+    /// 要害一：面板直接读 `store.notes`（@Observable），改名 / 改内容走**原地元素替换**
+    /// （避免击键级全表 reload 拖垮编辑器），任何写入漏更新数组都会表现为「操作成功但列表不动」；
+    /// 写穿还必须真的落库（下方用强制 reload 回读验证），否则重启后丢字。要害二：列表按
+    /// created_at 倒序 —— 新记事必须在顶部，且改名 / 改内容（会更新 updated_at）**不打乱**
+    /// 既有位置。要害三：分类 —— `notes(inProfile:)` 只过滤不混淆；记录删除必须级联清掉
+    /// 其记事（否则面板出现空分类）。
     private static func checkTerminalNoteStore() {
         let store = TerminalNoteStore.shared
         store.reload()
@@ -534,6 +539,13 @@ enum DebugSelfCheck {
         // 排序稳定性：改内容更新了 updated_at，但排序键是 created_at，位置不该动。
         let orderAfterEdit = store.notes(inProfile: category.id).map(\.id)
         expect(orderAfterEdit == [b.id, a.id], "编辑后不应打乱既有位置（新记事仍在先建的记事之前）")
+
+        // 写穿透落库回读：改名 / 改内容走原地元素替换后，强制 reload 应从库里读回同样的值
+        // （UPDATE 没落库的话，此处会读回空标题 / 空内容）。
+        store.reload()
+        let reread = store.notes.first { $0.id == a.id }
+        expect(reread?.title == "重启容器" && reread?.content == "docker restart web",
+               "改名与改内容应写穿落库（原地替换后 reload 回读须一致）")
 
         // 空标题展示回落 & 空内容不可执行。
         expect(b.displayTitle == "未命名记事", "空白标题展示应回落为「未命名记事」")

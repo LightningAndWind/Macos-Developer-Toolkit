@@ -27,6 +27,7 @@ struct LocalTerminalContainer: NSViewRepresentable {
         if let font = NSFont(name: "Menlo", size: 12) { view.font = font }
         view.translatesAutoresizingMaskIntoConstraints = true
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
+        context.coordinator.appliedColorScheme = colorScheme
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
         // dismantleNSView 是 static，拿不到实例属性；hub 一并寄存在 coordinator 里供其解绑。
@@ -46,6 +47,10 @@ struct LocalTerminalContainer: NSViewRepresentable {
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
         // 外观（明/暗）切换后重新套用配色：SwiftTerm 会烘焙颜色，需主动刷新。
+        // 必须按 colorScheme 去重：updateNSView 在宿主任意一轮重渲染都会被调用，
+        // 而 apply 里的 installColors 会清色板缓存并触发终端全量重绘，不能重复执行。
+        guard context.coordinator.appliedColorScheme != colorScheme else { return }
+        context.coordinator.appliedColorScheme = colorScheme
         TerminalTheme.apply(to: nsView, colorScheme: colorScheme)
     }
 
@@ -75,6 +80,8 @@ struct LocalTerminalContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var didStart = false
+        /// 已套用配色的外观；updateNSView 据此去重，避免重复 installColors 全量重绘。
+        var appliedColorScheme: ColorScheme?
         /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
         var inputHub: TerminalInputHub?
         var scrollMonitor: TerminalScrollerMonitor?

@@ -43,8 +43,8 @@ final class TabDragCoordinator {
 
     /// 拖拽开始时的行顺序快照（layoutRows 的 id）。
     private var rowOrder: [UUID] = []
-    /// 拖拽开始时各行在侧栏坐标空间中的基础帧（不含避让偏移）。
-    private var rowFrames: [UUID: CGRect] = [:]
+    /// 拖拽开始时各行在侧栏坐标空间中的基础位置（不含避让偏移）。
+    private var rowFrames: [UUID: CGPoint] = [:]
     /// 抓取点相对被拖行左上角的偏移，保证预览“贴手”。
     private var grabOffset: CGPoint = .zero
     /// 拖拽起始时指针的 X，用于计算水平跟手位移。
@@ -55,7 +55,7 @@ final class TabDragCoordinator {
     /// 开始拖拽：冻结当前布局快照，记录抓取点。
     func beginDrag(tabID: UUID,
                    rows: [TabManager.Row],
-                   frames: [UUID: CGRect],
+                   frames: [UUID: CGPoint],
                    location: CGPoint) {
         guard let frame = frames[tabID] else { return }
         let order = rows.map(\.id)
@@ -63,9 +63,9 @@ final class TabDragCoordinator {
         self.rowOrder = order
         self.rowFrames = frames
         self.stride = Theme.Metrics.tabRowHeight + Theme.Metrics.tabGap
-        self.grabOffset = CGPoint(x: location.x - frame.minX, y: location.y - frame.minY)
+        self.grabOffset = CGPoint(x: location.x - frame.x, y: location.y - frame.y)
         self.startPointerX = location.x
-        self.previewTopY = frame.minY
+        self.previewTopY = frame.y
         self.previewShiftX = 0
         self.draggedID = tabID
         self.hoverIndex = order.firstIndex(of: tabID) ?? 0
@@ -123,8 +123,8 @@ final class TabDragCoordinator {
 
     private func rowTop(_ index: Int) -> CGFloat {
         guard index >= 0, index < rowOrder.count,
-              let top = rowFrames[rowOrder[index]]?.minY else {
-            return rowFrames.values.map(\.minY).min() ?? 0
+              let top = rowFrames[rowOrder[index]]?.y else {
+            return rowFrames.values.map(\.y).min() ?? 0
         }
         return top
     }
@@ -143,9 +143,13 @@ final class TabDragCoordinator {
 
 // MARK: - Row frame reporting
 
-/// 各行在侧栏坐标空间中的帧汇总（拖拽未开始时用于建立布局快照）。
+/// 各行在侧栏坐标空间中的位置汇总（拖拽未开始时用于建立布局快照）。
+///
+/// 只报 origin（CGPoint）不报整帧 CGRect：坐标消费方（落点换算 / 抓取偏移）只用位置，
+/// 不用尺寸；而拖拽调整侧栏宽度时每行宽度逐帧变化，若把尺寸算进偏好值，
+/// 每帧都会触发 onPreferenceChange → liveRowFrames 状态写入 → 整个标签栏二次重渲染。
 struct TabRowFrames: Equatable {
-    var frames: [UUID: CGRect] = [:]
+    var frames: [UUID: CGPoint] = [:]
 }
 
 struct TabRowFramesKey: PreferenceKey {

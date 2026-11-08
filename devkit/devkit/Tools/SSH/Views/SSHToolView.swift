@@ -51,18 +51,22 @@ struct SSHToolView: View {
                                  onToggleEditorEnlarged: {
                                      withAnimation(Theme.Motion.content) { notepadEnlarged.toggle() }
                                  })
+                // 面板自定义 Equatable：本视图每轮 body 都会新建上面的回调闭包，
+                // 不显式忽略会让终端侧任何重绘都传染成面板 body 重算。
+                .equatable()
                 .frame(width: notepadEnlarged
                        ? Theme.Metrics.notepadPanelExpandedWidth
                        : Theme.Metrics.notepadPanelWidth)
-                .terminalCardSurface()
+                // 分类下拉是自绘弹层，要溢出面板边界；只让背景板裁圆角，内容不裁。
+                .terminalCardSurface(clipsContent: false)
                 .padding(.trailing, Theme.Metrics.sideStripWidth + Theme.Metrics.terminalSideGap)
                 .offset(x: showNotepad ? 0 : notepadExitOffset)
                 .allowsHitTesting(showNotepad)
                 .accessibilityHidden(!showNotepad)
         }
-        .animation(Theme.Motion.content, value: showNotepad)
-        // 放大切换时面板加宽 / 终端收窄的布局变化走同一动画令牌。
-        .animation(Theme.Motion.content, value: notepadEnlarged)
+        // 这里刻意不挂 `.animation(_:value:)`：它会把整个 ZStack 子树（含 AppKit
+        // 终端容器与常驻记事本面板）纳入隐式动画作用域。开关与放大两处已经显式
+        // `withAnimation`，事务只覆盖真正变化的那一次，作用域更小也更可预测。
         // 外部边距：终端卡片与窗口四边都留白。
         .padding(Theme.Metrics.terminalContentInset)
         .onChange(of: tool.remoteRunning) { _, _ in appState.scheduleSessionSave() }

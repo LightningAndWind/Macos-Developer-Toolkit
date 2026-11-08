@@ -40,6 +40,12 @@ final class DatabaseManager: @unchecked Sendable {
         self.db = handle
         self.fileURL = url
         try _migrateLocked()
+        // WAL + synchronous=NORMAL：记事本编辑器是「每次击键写穿一条 UPDATE」的模式，
+        // 默认 rollback journal + FULL 同步下每次提交都要多次 fsync，主线程可感知顿挫。
+        // WAL 把提交降为追加写、NORMAL 只在检查点落盘，单进程本地库下安全性无损
+        // （崩溃最多丢最后一次检查点后的事务，库本身不会损坏）。失败（如只读介质）不影响使用。
+        try? _execLocked("PRAGMA journal_mode=WAL;")
+        try? _execLocked("PRAGMA synchronous=NORMAL;")
     }
 
     func close() {

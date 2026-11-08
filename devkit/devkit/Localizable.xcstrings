@@ -2404,6 +2404,7 @@
       }
     },
     "分类" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2500,6 +2501,9 @@
           }
         }
       }
+    },
+    "切换到超窄模式" : {
+
     },
     "创建" : {
       "localizations" : {
@@ -5974,6 +5978,7 @@
       }
     },
     "拖动调整侧栏宽度，双击恢复默认" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5988,6 +5993,9 @@
           }
         }
       }
+    },
+    "拖动调整宽度，双击恢复默认" : {
+
     },
     "拖动调整请求区与响应区的高度，双击恢复默认" : {
       "localizations" : {
@@ -6301,6 +6309,7 @@
       }
     },
     "收起侧栏" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7473,6 +7482,7 @@
       }
     },
     "暂无连接" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7489,6 +7499,7 @@
       }
     },
     "更多操作" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7621,6 +7632,7 @@
       }
     },
     "未分类" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11655,7 +11667,6 @@
       }
     },
     "重命名" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

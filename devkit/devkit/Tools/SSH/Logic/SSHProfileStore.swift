@@ -16,6 +16,22 @@ enum SSHProfileStore {
     private static let encoder = JSONEncoder()
     private static let decoder = JSONDecoder()
 
+    /// 分类候选（id + name）的缓存。
+    ///
+    /// 记事本分类选择器以前在**每轮 body** 都执行一次 SQLite 查询 + localized 排序，
+    /// 面板任何状态变化（展开、击键、切分类）都会命中一次主线程同步 I/O，表现为「卡一下」。
+    /// 这里按当前数据库文件路径缓存，写操作主动失效；换库（重新选数据目录）也会自动失效。
+    private static var summaryCache: (dbPath: String, values: [(id: UUID, name: String)])?
+
+    /// 写操作后丢弃缓存并通知已打开的分类选择器刷新。
+    private static func invalidateSummaries() {
+        summaryCache = nil
+        NotificationCenter.default.post(name: .sshProfilesDidChange, object: nil)
+    }
+
+    /// 供数据库重新打开等外部场景显式失效（缓存本身已带路径指纹，通常无需调用）。
+    static func invalidateProfileSummaries() { invalidateSummaries() }
+
     // MARK: - Folders
 
     /// 新建文件夹；`parentID == nil` 落在根。返回创建后的模型（db 未开返回 nil）。
@@ -135,6 +151,7 @@ enum SSHProfileStore {
                 .blob(data),
             ]
         )
+        invalidateSummaries()
     }
 
     static func load(id: UUID) -> SSHProfile? {
@@ -166,6 +183,27 @@ enum SSHProfileStore {
         return results
     }
 
+    /// 仅 id + name 的轻量摘要（记事本分类选择器）：不读取也不解码 profile_json
+    /// （整条含密码的 blob），且结果按数据库缓存，避免面板每轮 body 都查库 + localized 排序。
+    static func allRequestSummaries() -> [(id: UUID, name: String)] {
+        let dbPath = DatabaseManager.shared.fileURL?.path ?? ""
+        if let cached = summaryCache, cached.dbPath == dbPath { return cached.values }
+        guard DatabaseManager.shared.isOpen else { return [] }
+        var results: [(id: UUID, name: String)] = []
+        try? DatabaseManager.shared.query(
+            "SELECT id, name FROM ssh_profiles;"
+        ) { row in
+            guard let id = UUID(uuidString: row.text(0) ?? ""),
+                  let name = row.text(1)
+            else { return true }
+            results.append((id: id, name: name))
+            return true
+        }
+        let values = results.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        summaryCache = (dbPath: dbPath, values: values)
+        return values
+    }
+
     /// 仅改名（供标签标题双向同步）。
     ///
     /// 走「整条读改写」而不是只 UPDATE 标量列：`name` 列只是查询冗余，
@@ -195,6 +233,7 @@ enum SSHProfileStore {
         }
         TerminalNoteStore.shared.deleteAll(inProfile: id)
         try? DatabaseManager.shared.run("DELETE FROM ssh_profiles WHERE id = ?;", bind: [.text(id.uuidString)])
+        invalidateSummaries()
     }
 
     // MARK: - Tree
@@ -226,4 +265,9 @@ enum SSHProfileStore {
             .map { SSHCollectionNode(id: $0.id, kind: .profile($0), children: nil) }
         return rootFolders + rootProfiles
     }
+}
+
+extension Notification.Name {
+    /// SSH 记录发生增删改：分类选择器据此刷新候选列表（缓存已同步失效）。
+    static let sshProfilesDidChange = Notification.Name("devkit.sshProfiles.didChange")
 }

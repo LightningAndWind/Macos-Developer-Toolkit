@@ -13,14 +13,15 @@ enum Theme {
 
     /// 尺寸与间距令牌。
     enum Metrics {
-        /// 左侧竖向标签栏（侧栏）默认宽度；实际宽度由用户拖拽分割线调整并持久化。
+        /// 侧栏「标准」档宽度（设计基准，见 SidebarWidthMode）。宽度不再允许拖拽。
         static let sidebarWidth: CGFloat = 208
-        /// 侧栏最小宽度：约为默认宽度一半，且比左上角三色按钮（约 80pt）略宽，保证按钮不溢出。
+        /// 历史拖拽区间令牌，现仅用于调试快照的尺寸夹具（DebugSnapshot）。
         static let sidebarMinWidth: CGFloat = 108
-        /// 侧栏最大宽度：再宽会明显挤压内容区，收益递减。
         static let sidebarMaxWidth: CGFloat = 360
-        /// 侧栏收起（窄轨）宽度：仅容纳标签图标 / “+” / 底部操作按钮的图标栏。
-        static let sidebarRailWidth: CGFloat = 46
+        /// 侧栏超窄模式宽度：标准档的一半；标签行样式与标准档一致（图标 + 标题），只是更窄。
+        ///
+        /// 仍远离左上角三色按钮：交通灯按钮整组右缘约 72pt，低于该值侧栏边界会从按钮组中间穿过。
+        static let sidebarUltraNarrowWidth: CGFloat = sidebarWidth / 2
         /// 分割线拖拽热区宽度（视觉仍为 1pt 细线，仅热区加宽）。
         static let splitterHitWidth: CGFloat = 7
         /// 横向分割线（上下分区）拖拽热区高度；视觉仍为 1pt 细线，仅热区加高。
@@ -97,6 +98,43 @@ enum Theme {
         static let sideStripButtonSize: CGFloat = 28
     }
 
+    /// 侧栏展开态的固定宽度档位（缩起态另由 `AppPreferences.sidebarCollapsedKey` 控制）。
+    ///
+    /// 侧栏宽度不再支持拖拽：标准档为设计基准，wide / extraWide 分别在其上加一半、加一倍。
+    /// rawValue 直接作为 @AppStorage 的持久化值，档位变化只在点击按钮时发生（低频）。
+    enum SidebarWidthMode: Int, CaseIterable, Identifiable {
+        case standard = 0
+        case wide = 1
+        case extraWide = 2
+
+        var id: Int { rawValue }
+
+        var width: CGFloat {
+            switch self {
+            case .standard:  return Metrics.sidebarWidth
+            case .wide:      return Metrics.sidebarWidth * 1.5
+            case .extraWide: return Metrics.sidebarWidth * 2
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .standard:  return "标准宽度（1×）"
+            case .wide:      return "加宽一半（1.5×）"
+            case .extraWide: return "加宽一倍（2×）"
+            }
+        }
+
+        /// 档位图标中左侧填充条的宽度，用来直观区分三档。
+        var glyphFill: CGFloat {
+            switch self {
+            case .standard:  return 4
+            case .wide:      return 6
+            case .extraWide: return 8
+            }
+        }
+    }
+
     /// 字体令牌。
     enum Fonts {
         static let tabTitle = Font.system(size: 12)
@@ -114,6 +152,9 @@ enum Theme {
         static let content: Animation = .easeInOut(duration: 0.22)
         /// 拖拽时其他标签的避让位移：高阻尼、短响应，跟手不拖泥带水。
         static let drag: Animation = .spring(response: 0.22, dampingFraction: 0.9)
+        /// 侧栏宽度档位切换 / 收起展开：短促的 easeOut。
+        /// 不用 spring：弹簧即使阻尼较高，可见运动也会拖到 0.7–1 秒，切换显得迟滞。
+        static let sidebarResize: Animation = .easeOut(duration: 0.2)
     }
 
     /// 转场令牌（视图插入 / 移除动画）。

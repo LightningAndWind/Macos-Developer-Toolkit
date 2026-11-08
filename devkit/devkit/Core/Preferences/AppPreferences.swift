@@ -12,10 +12,11 @@ import Foundation
 final class AppPreferences {
     static let shared = AppPreferences()
 
-    /// 侧栏宽度偏好键。视图侧用 `@AppStorage` 直接绑定，保证拖拽时 SwiftUI 实时刷新。
-    static let sidebarWidthKey = "devkit.sidebar.width"
+    /// 侧栏展开态宽度档位键（`Theme.SidebarWidthMode.rawValue`）。
+    /// 视图侧用 `@AppStorage` 直接绑定枚举，两个视图（主界面 / 标签栏按钮）自动同步。
+    static let sidebarWidthModeKey = "devkit.sidebar.widthMode"
 
-    /// 侧栏收起偏好键（收起成只显示图标的窄轨，Chrome 竖排标签样式）。
+    /// 侧栏超窄模式偏好键（标准档一半宽度，标签行样式不变）。
     static let sidebarCollapsedKey = "devkit.sidebar.collapsed"
 
     /// 外观模式偏好键（跟随系统 / 浅色 / 深色）。视图侧用 `@AppStorage` 绑定，见 `AppAppearanceMode`。
@@ -35,6 +36,10 @@ final class AppPreferences {
     private let defaults: UserDefaults
     /// 当前正在访问的安全作用域 URL（需要成对调用 stop）。
     private var accessingURL: URL?
+    /// 临时数据目录（仅本进程生效，不落盘）：DEBUG + DEVKIT_DATA_DIR 自检 / 冒烟专用。
+    /// 为什么不走 setDataDirectory：那会把临时路径经 cfprefsd 持久化（缓存 + 磁盘），
+    /// 之后真实启动读到已删除的临时目录 → 「Failed to open database」启动失败（实测踩过）。
+    private var ephemeralDataDirectoryURL: URL?
 
     private init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -45,9 +50,10 @@ final class AppPreferences {
         dataDirectoryURL != nil
     }
 
-    /// 数据目录。关闭沙盒后以记录的绝对路径为准（可直接访问任意路径）；
+    /// 数据目录。临时目录（自检模式）优先；其次以记录的绝对路径为准（关闭沙盒后可直接访问任意路径）；
     /// 若路径缺失则回退解析历史书签（旧沙盒构建存的是 security-scope 书签）。
     var dataDirectoryURL: URL? {
+        if let ephemeralDataDirectoryURL { return ephemeralDataDirectoryURL }
         if let path = defaults.string(forKey: Keys.dataPath), !path.isEmpty {
             return URL(fileURLWithPath: path)
         }
@@ -71,6 +77,12 @@ final class AppPreferences {
         saveBookmark(for: url)
         // 兼容旧逻辑：尝试激活一次（非沙盒下为无害的空操作）。
         beginAccessing(url)
+    }
+
+    /// 设置**仅本进程生效**的临时数据目录（不写 UserDefaults、不存书签）。
+    /// 供 DEBUG + DEVKIT_DATA_DIR 的自检 / 冒烟流程使用，绝不污染真实偏好。
+    func setEphemeralDataDirectory(_ url: URL) {
+        ephemeralDataDirectoryURL = url
     }
 
     /// 清除数据目录设置（用于设置页更换目录或重置）。

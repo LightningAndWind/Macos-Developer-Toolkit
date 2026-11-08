@@ -30,6 +30,7 @@ struct SSHTerminalContainer: NSViewRepresentable {
         view.terminalDelegate = context.coordinator
         view.translatesAutoresizingMaskIntoConstraints = true
         TerminalTheme.apply(to: view, colorScheme: colorScheme)
+        context.coordinator.appliedColorScheme = colorScheme
         // 与本地 / 系统 ssh 终端一致：隐藏 SwiftTerm 那条常驻白/灰轨道的右侧滚动条。
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
@@ -43,6 +44,13 @@ struct SSHTerminalContainer: NSViewRepresentable {
     func updateNSView(_ nsView: TerminalView, context: Context) {
         context.coordinator.client = client
         // 外观（明/暗）切换后重新套用配色：SwiftTerm 会烘焙颜色，需主动刷新。
+        // 按 colorScheme 去重：apply 的 installColors 会触发终端全量重绘，
+        // 而 updateNSView 在宿主任意一轮重渲染都会被调用，不能重复执行。
+        guard context.coordinator.appliedColorScheme != colorScheme else {
+            context.coordinator.startConsumingIfNeeded()
+            return
+        }
+        context.coordinator.appliedColorScheme = colorScheme
         TerminalTheme.apply(to: nsView, colorScheme: colorScheme)
         // 消费远端输出（仅启动一次）。
         context.coordinator.startConsumingIfNeeded()
@@ -58,6 +66,8 @@ struct SSHTerminalContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, TerminalViewDelegate {
         var client: SSHClient
+        /// 已套用配色的外观；updateNSView 据此去重，避免重复 installColors 全量重绘。
+        var appliedColorScheme: ColorScheme?
         /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
         var inputHub: TerminalInputHub?
         private weak var view: TerminalView?

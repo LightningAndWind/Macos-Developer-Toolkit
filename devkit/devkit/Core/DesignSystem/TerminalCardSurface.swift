@@ -13,18 +13,35 @@ import SwiftUI
 struct TerminalCardSurface: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
+    /// 是否把内容裁进圆角。默认开启（终端卡片需要裁掉方角内容）。
+    /// 记事本面板内含自绘下拉弹层，弹层要溢出面板边界，需传 false —— 否则会被裁掉。
+    var clipsContent: Bool = true
+
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .background {
-                ZStack {
-                    panelShape.fill(.ultraThinMaterial)
-                    panelShape.fill(Color(nsColor: .windowBackgroundColor)
-                        .opacity(colorScheme == .dark ? 0 : 0.2))
+        if clipsContent {
+            content
+                .background { panelBackground }
+                .clipShape(panelShape)
+                // 面板类元素的统一悬浮阴影：从毛玻璃底上"浮"起来，与连接横幅等悬浮卡片同一层次语言。
+                .shadow(color: Theme.Palette.floatingShadow, radius: 8, y: 2)
+        } else {
+            // 只给背景板裁圆角 + 投影，内容（下拉弹层）不裁。
+            content
+                .background {
+                    panelBackground
+                        .clipShape(panelShape)
+                        .shadow(color: Theme.Palette.floatingShadow, radius: 8, y: 2)
                 }
-            }
-            .clipShape(panelShape)
-            // 面板类元素的统一悬浮阴影：从毛玻璃底上"浮"起来，与连接横幅等悬浮卡片同一层次语言。
-            .shadow(color: Theme.Palette.floatingShadow, radius: 8, y: 2)
+        }
+    }
+
+    private var panelBackground: some View {
+        ZStack {
+            panelShape.fill(.ultraThinMaterial)
+            panelShape.fill(Color(nsColor: .windowBackgroundColor)
+                .opacity(colorScheme == .dark ? 0 : 0.2))
+        }
     }
 
     private var panelShape: RoundedRectangle {
@@ -34,7 +51,7 @@ struct TerminalCardSurface: ViewModifier {
 
 extension View {
     /// 终端卡片同款面板底（毛玻璃 + 圆角）。
-    func terminalCardSurface() -> some View {
-        modifier(TerminalCardSurface())
+    func terminalCardSurface(clipsContent: Bool = true) -> some View {
+        modifier(TerminalCardSurface(clipsContent: clipsContent))
     }
 }

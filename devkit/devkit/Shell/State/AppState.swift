@@ -60,12 +60,14 @@ final class AppState {
     func bootstrap() async {
         phase = .booting
         // 开发调试：设置 DEVKIT_DATA_DIR 可直接跳过引导页（仅 DEBUG 构建生效）。
+        // 数据目录走 ephemeral（仅本进程）：persist 会把临时路径写进真实 defaults，
+        // 之后正常启动读到已删除的临时目录 → 「Failed to open database」启动失败。
         #if DEBUG
         if let envDir = ProcessInfo.processInfo.environment["DEVKIT_DATA_DIR"],
            !envDir.isEmpty {
             let dir = URL(fileURLWithPath: envDir, isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            completeOnboarding(with: dir)
+            completeOnboarding(with: dir, persist: false)
             seedDemoSessionIfRequested()
             openSettingsIfRequested()
             DebugSnapshot.runIfRequested(appState: self)
@@ -83,6 +85,7 @@ final class AppState {
         AppPreferences.shared.beginAccessing(dir)
         do {
             try DatabaseManager.shared.open(at: dbFile)
+            SSHProfileStore.invalidateProfileSummaries()
             restoreSession()
             phase = .ready
             AIAccessServer.shared.autostartIfNeeded()
@@ -92,11 +95,17 @@ final class AppState {
     }
 
     /// 引导页完成：保存书签 + 建库 + 恢复空会话。
-    func completeOnboarding(with directory: URL) {
+    /// `persist = false` 时数据目录仅本进程生效（自检 / 冒烟），不写任何偏好。
+    func completeOnboarding(with directory: URL, persist: Bool = true) {
         do {
-            try AppPreferences.shared.setDataDirectory(directory)
+            if persist {
+                try AppPreferences.shared.setDataDirectory(directory)
+            } else {
+                AppPreferences.shared.setEphemeralDataDirectory(directory)
+            }
             let dbFile = directory.appendingPathComponent("devkit.sqlite3")
             try DatabaseManager.shared.open(at: dbFile)
+            SSHProfileStore.invalidateProfileSummaries()
             restoreSession()
             phase = .ready
             AIAccessServer.shared.autostartIfNeeded()

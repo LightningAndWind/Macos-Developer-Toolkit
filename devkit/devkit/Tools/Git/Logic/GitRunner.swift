@@ -74,14 +74,28 @@ enum GitRunner {
             process.standardError = stderrPipe
 
             // 累积与逐行切分在专用串行队列进行，保证顺序且无数据竞争。
+            // EOF 信号：readabilityHandler 读到空数据（写端全部关闭）时触发，
+            // terminationHandler 依赖它确保尾部数据已被 handler 消费完毕再 finalize。
             let collector = OutputCollector(onLine: onLine)
+            let stdoutEOF = DispatchSemaphore(value: 0)
+            let stderrEOF = DispatchSemaphore(value: 0)
             stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                if !data.isEmpty { collector.append(data, isStderr: false) }
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    stdoutEOF.signal()
+                } else {
+                    collector.append(data, isStderr: false)
+                }
             }
             stderrPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                if !data.isEmpty { collector.append(data, isStderr: true) }
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    stderrEOF.signal()
+                } else {
+                    collector.append(data, isStderr: true)
+                }
             }
 
             // 可选超时看护：到点标记并终止子进程；terminationHandler 随即收尾 resume。
@@ -94,9 +108,22 @@ enum GitRunner {
             }
 
             process.terminationHandler = { proc in
-                // 收尾：flush 两个管道剩余数据，再回调完成。
-                stdoutPipe.fileHandleForReading.readabilityHandler = nil
-                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                // 进程退出 ≠ 管道读尽：clearing handler 与在途回调之间存在竞态，
+                // 直接 finalize 会偶发吞掉尾部数据（表现为 git 结果为空 / 控制台缺尾）。
+                // 先等两个管道到 EOF（上限 2s，防孙进程继承句柄时挂死），
+                // 已 EOF 的管道再兜底补读一次剩余数据；未 EOF（handler 仍在）的管道
+                // 不能手动读，否则与 handler 并发读同一句柄。
+                let deadline = DispatchTime.now() + .seconds(2)
+                let stdoutDrained = stdoutEOF.wait(timeout: deadline) == .success
+                let stderrDrained = stderrEOF.wait(timeout: deadline) == .success
+                if stdoutDrained {
+                    let rest = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                    if !rest.isEmpty { collector.append(rest, isStderr: false) }
+                }
+                if stderrDrained {
+                    let rest = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                    if !rest.isEmpty { collector.append(rest, isStderr: true) }
+                }
                 let out = collector.finalize()
                 let result = GitProcessOutput(exitCode: proc.terminationStatus,
                                               stdout: out.stdout,
