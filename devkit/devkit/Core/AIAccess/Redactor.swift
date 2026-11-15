@@ -67,7 +67,7 @@ enum Redactor {
             if let password = connection.normalizedPassword { secrets.append(password) }
         }
 
-        if let dir = AppPreferences.shared.dataDirectoryURL, dir.path.count >= 8 {
+        if let dir = try? AppPreferences.shared.resolvedDataDirectoryURL(), dir.path.count >= 8 {
             secrets.append(dir.path)
         }
 

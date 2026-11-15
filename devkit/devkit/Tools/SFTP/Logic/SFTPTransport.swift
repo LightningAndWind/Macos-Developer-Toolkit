@@ -27,14 +27,23 @@ nonisolated protocol SFTPTransport: AnyObject {
 
 // MARK: - 进程内 NIOSSH（密码认证）
 
-/// 用 NIOSSH 连主机 → 开 session 子通道 → 激活 sftp 子系统，字节流经 `SFTPChannelHandler` 切帧。
+/// 用 NIOSSH 连主机（直连或经跳板隧道，见 `SSHCarrierBuilder`）→ 开 session 子通道 →
+/// 激活 sftp 子系统，字节流经 `SFTPChannelHandler` 切帧。
 nonisolated final class NIOSSHSFTPTransport: SFTPTransport, @unchecked Sendable {
     private let profile: SSHProfile
     private let auth: NIOSSHClientUserAuthenticationDelegate
+    /// 跳板记录与其认证委托（均由主 actor 构造后传入）；nil = 直连。
+    private let jumpProfile: SSHProfile?
+    private let jumpAuth: NIOSSHClientUserAuthenticationDelegate?
 
-    init(profile: SSHProfile, auth: NIOSSHClientUserAuthenticationDelegate) {
+    init(profile: SSHProfile,
+         auth: NIOSSHClientUserAuthenticationDelegate,
+         jumpProfile: SSHProfile? = nil,
+         jumpAuth: NIOSSHClientUserAuthenticationDelegate? = nil) {
         self.profile = profile
         self.auth = auth
+        self.jumpProfile = jumpProfile
+        self.jumpAuth = jumpAuth
     }
 
     var failureSummary: String? { nil }
@@ -42,27 +51,19 @@ nonisolated final class NIOSSHSFTPTransport: SFTPTransport, @unchecked Sendable 
     func start(core: SFTPCore) async throws {
         let auth = self.auth
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-        var conn: Channel?
+        var root: Channel?
+        var carrier: Channel?
         var child: Channel?
         do {
-            let bootstrap = ClientBootstrap(group: group)
-                .channelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        let ssh = NIOSSHHandler(
-                            role: .client(.init(userAuthDelegate: auth,
-                                                serverAuthDelegate: AcceptAllHostKeysDelegate())),
-                            allocator: channel.allocator,
-                            inboundChildChannelInitializer: nil
-                        )
-                        try channel.pipeline.syncOperations.addHandler(ssh)
-                    }
-                }
-                .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            let established = try await SSHCarrierBuilder.establish(profile: profile,
+                                                                    jumpProfile: jumpProfile,
+                                                                    targetAuth: auth,
+                                                                    jumpAuth: jumpAuth,
+                                                                    group: group)
+            root = established.rootChannel
+            carrier = established.carrierChannel
 
-            let connection = try await bootstrap.connect(host: profile.host, port: profile.port).get()
-            conn = connection
-
-            let channel = try await Self.openSFTPChannel(on: connection, core: core)
+            let channel = try await Self.openSFTPChannel(on: established.carrierChannel, core: core)
             child = channel
 
             core.setTransport(
@@ -75,14 +76,17 @@ nonisolated final class NIOSSHSFTPTransport: SFTPTransport, @unchecked Sendable 
                     }
                 },
                 terminate: {
+                    // 会话 / 承载 / 最外层通道全关：经跳板时漏关 root 会留下无人的跳板 TCP 连接。
                     channel.close(mode: .all, promise: nil)
-                    connection.close(mode: .all, promise: nil)
+                    carrier?.close(mode: .all, promise: nil)
+                    root?.close(mode: .all, promise: nil)
                     try? group.syncShutdownGracefully()
                 }
             )
         } catch {
             child?.close(mode: .all, promise: nil)
-            conn?.close(mode: .all, promise: nil)
+            carrier?.close(mode: .all, promise: nil)
+            root?.close(mode: .all, promise: nil)
             try? group.syncShutdownGracefully()
             throw error
         }
@@ -105,13 +109,6 @@ nonisolated final class NIOSSHSFTPTransport: SFTPTransport, @unchecked Sendable 
             }
             return promise.futureResult
         }.get()
-    }
-}
-
-/// 主机密钥已在连接前按 host:port 维度完成 TOFU 询问，故此处直接放行。
-private nonisolated final class AcceptAllHostKeysDelegate: NIOSSHClientServerAuthenticationDelegate {
-    nonisolated func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
-        validationCompletePromise.succeed(())
     }
 }
 
@@ -184,6 +181,8 @@ nonisolated final class SystemSSHTransport: SFTPTransport, @unchecked Sendable {
     private let profile: SSHProfile
     private let keyURL: URL
     private let knownHostsPath: String
+    /// 跳板机选项（`-o ProxyCommand=...` 两条 argv；由主 actor 解析后传入，空数组 = 直连）。
+    private let jumpOptions: [String]
 
     private let lock = NSLock()
     nonisolated(unsafe) private var process: Process?
@@ -194,10 +193,11 @@ nonisolated final class SystemSSHTransport: SFTPTransport, @unchecked Sendable {
     private var stderrData = Data()
     private var finished = false
 
-    init(profile: SSHProfile, keyURL: URL, knownHostsPath: String) {
+    init(profile: SSHProfile, keyURL: URL, knownHostsPath: String, jumpOptions: [String] = []) {
         self.profile = profile
         self.keyURL = keyURL
         self.knownHostsPath = knownHostsPath
+        self.jumpOptions = jumpOptions
     }
 
     func start(core: SFTPCore) async throws {
@@ -205,7 +205,8 @@ nonisolated final class SystemSSHTransport: SFTPTransport, @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         process.arguments = Self.sshArguments(profile: profile,
                                               keyURL: keyURL,
-                                              knownHostsPath: knownHostsPath)
+                                              knownHostsPath: knownHostsPath,
+                                              jumpOptions: jumpOptions)
 
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
@@ -344,8 +345,12 @@ nonisolated final class SystemSSHTransport: SFTPTransport, @unchecked Sendable {
 
     /// 组装 `ssh` 参数：仅走公钥、非交互（认证失败即退出而非挂起等待口令/密码）、
     /// 首次连接自动写入应用私有的 known_hosts（不污染用户 `~/.ssh`）。
-    private static func sshArguments(profile: SSHProfile, keyURL: URL, knownHostsPath: String) -> [String] {
-        [
+    /// 配置了跳板机时，批处理模式下跳板也必须私钥认证（选项由 `SSHJumpSupport` 预先校验组装）。
+    private static func sshArguments(profile: SSHProfile,
+                                     keyURL: URL,
+                                     knownHostsPath: String,
+                                     jumpOptions: [String]) -> [String] {
+        jumpOptions + [
             "-o", "BatchMode=yes",
             "-o", "PreferredAuthentications=publickey",
             "-o", "NumberOfPasswordPrompts=0",

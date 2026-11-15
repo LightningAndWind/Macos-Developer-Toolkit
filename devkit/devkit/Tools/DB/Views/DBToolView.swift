@@ -54,7 +54,7 @@ struct DBToolView: View {
                 showsHoverBackground: false
             ) { hovering in
                 HStack(spacing: 6) {
-                    Image(systemName: tool.selectedConnection?.kind == .redis ? "bolt.horizontal.circle" : "cylinder.and.ellipse")
+                    Image(systemName: tool.selectedConnection?.kind == .redis ? "bolt.horizontal.circle" : "cylinder.split.1x2")
                         .font(.system(size: 11))
                     Text(tool.selectedConnection?.name ?? "选择连接")
                         .font(.system(size: 12))

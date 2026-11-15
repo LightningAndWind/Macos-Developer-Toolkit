@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 /// 常用方法预设；请求模型内部以字符串存储，以便支持自定义方法。
 enum HTTPMethodPreset: String, CaseIterable, Identifiable {
@@ -31,13 +32,49 @@ struct HTTPKV: Identifiable, Hashable, Codable {
     var isPlaceholder: Bool { key.isEmpty && value.isEmpty }
 }
 
-/// 请求体。M2 覆盖 none / json / form(urlencoded) / raw；multipart 与 GraphQL 留待 M5。
+/// multipart 的文件条目：存绝对路径，发送时按路径读取（应用未开沙盒，可直接读）。
+struct HTTPMultipartFile: Identifiable, Hashable, Codable {
+    var id: UUID = UUID()
+    /// 表单字段名（服务端接收端的名字，如 `file` / `avatar`）。
+    var fieldName: String = "file"
+    /// 文件绝对路径。
+    var filePath: String = ""
+    /// 上传时使用的 filename；空 = 取路径末段。
+    var fileName: String = ""
+    /// Content-Type；空 = 发送时按扩展名推断（`application/octet-stream` 兜底）。
+    var mimeType: String = ""
+    var enabled: Bool = true
+
+    var isPlaceholder: Bool { filePath.isEmpty && fieldName.isEmpty }
+
+    /// 实际上传时的 filename：显式填了就用它，否则取路径末段。
+    var effectiveFileName: String {
+        fileName.isEmpty ? (filePath as NSString).lastPathComponent : fileName
+    }
+
+    /// 发送时实际使用的 Content-Type：显式填写优先，否则按 filename 扩展名推断，
+    /// 兜底 `application/octet-stream`。发送（HTTPClient）与 cURL 导出共用同一推导，
+    /// 保证「发出去的」和「复制出来的命令」行为一致。
+    var effectiveMimeType: String {
+        if !mimeType.isEmpty { return mimeType }
+        let ext = (effectiveFileName as NSString).pathExtension
+        return UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
+    }
+
+    /// 该条目会作为一个部件参与发送吗（启用 + 字段名与路径都填了）。
+    var isActive: Bool {
+        enabled && !fieldName.isEmpty && !filePath.isEmpty
+    }
+}
+
+/// 请求体。M2 覆盖 none / json / form(urlencoded) / raw；后续补齐 multipart（Form-Data）。
 struct HTTPBodyModel: Hashable, Codable {
     enum Kind: String, CaseIterable, Identifiable, Codable {
         case none = "无"
         case json = "JSON"
         case form = "Form URL-encoded"
         case raw = "Raw"
+        case multipart = "Form-Data"
         var id: String { rawValue }
     }
 
@@ -46,12 +83,19 @@ struct HTTPBodyModel: Hashable, Codable {
     var text: String = ""
     /// form-urlencoded 的字段。
     var formFields: [HTTPKV] = []
+    /// multipart 的文本字段。
+    var multipartFields: [HTTPKV] = []
+    /// multipart 的文件条目。
+    var multipartFiles: [HTTPMultipartFile] = []
 
     var isEmpty: Bool {
         switch kind {
         case .none: return true
         case .json, .raw: return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .form: return formFields.filter { $0.enabled && !$0.key.isEmpty }.isEmpty
+        case .multipart:
+            let hasField = multipartFields.contains { $0.enabled && !$0.key.isEmpty }
+            return !hasField && !multipartFiles.contains { $0.isActive }
         }
     }
 
@@ -61,13 +105,19 @@ struct HTTPBodyModel: Hashable, Codable {
         case .json: return "application/json"
         case .form: return "application/x-www-form-urlencoded"
         case .raw: return "text/plain"
+        // multipart 的 Content-Type 需带每次生成的 boundary，由 `HTTPClient` 在发送时设置；
+        // 这里返回 nil，避免静态值与实际 boundary 错位把请求发坏。
+        case .multipart: return nil
         }
     }
 
     /// 编码后的请求体字符串（form 做 URL 编码）；空体返回 nil。
+    ///
+    /// multipart 不走这里：它含二进制文件内容，无法表示为 String ——
+    /// 由 `HTTPClient.multipartBody` 直接产 `Data`。
     var encodedPayload: String? {
         switch kind {
-        case .none:
+        case .none, .multipart:
             return nil
         case .json, .raw:
             return text.isEmpty ? nil : text
@@ -198,6 +248,20 @@ enum HTTPQueryUtil {
 }
 
 // MARK: - 兼容旧数据的解码
+
+extension HTTPBodyModel {
+    /// 自定义解码的理由与下方 `HTTPRequestModel.init(from:)` 相同：multipart 的两个数组是后补字段，
+    /// 而合成的 `init(from:)` 缺键直接抛 `keyNotFound`，集合与历史读取都写成 `try?` ——
+    /// 不兜底的话，升级后所有旧请求记录会**静默整条消失**。新字段一律 `decodeIfPresent` 回退默认值。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        text = try c.decode(String.self, forKey: .text)
+        formFields = try c.decode([HTTPKV].self, forKey: .formFields)
+        multipartFields = try c.decodeIfPresent([HTTPKV].self, forKey: .multipartFields) ?? []
+        multipartFiles = try c.decodeIfPresent([HTTPMultipartFile].self, forKey: .multipartFiles) ?? []
+    }
+}
 
 extension HTTPRequestModel {
     /// 自定义解码（放在扩展里，保留编译器合成的逐成员初始化器，与 `SSHProfile` 同款处理）。

@@ -29,7 +29,7 @@ struct HistoryDetailView: View {
             header
             Divider()
             Picker("页", selection: $pane) {
-                ForEach(Pane.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Pane.allCases) { Text(L($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -135,10 +135,55 @@ struct HistoryDetailView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
         } else {
-            HTTPSection(title: "Body · \(body.kind.rawValue)") {
+            HTTPSection(title: "Body · " + L(body.kind.rawValue)) {
                 switch body.kind {
                 case .form:
                     ReadOnlyKVList(items: body.formFields)
+                case .multipart:
+                    // 文本字段沿用 KV 列表；文件条目另起一栏：字段名 / 文件名 / MIME / 路径。
+                    // 只展示不读内容 —— 历史里存的是路径引用，文件此刻是否存在要等重放才知道。
+                    VStack(alignment: .leading, spacing: 10) {
+                        if body.multipartFields.contains(where: { !$0.isPlaceholder }) {
+                            ReadOnlyKVList(items: body.multipartFields)
+                        }
+                        if body.multipartFiles.isEmpty {
+                            Text("无文件")
+                                .font(.callout).foregroundStyle(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(body.multipartFiles.enumerated()), id: \.element.id) { index, file in
+                                    HStack(alignment: .top, spacing: 10) {
+                                        // 三目与插值都是运行期 String 通道，占位文案须显式 L()；
+                                        // 字段名 / 文件名 / 路径 / MIME 本身是用户数据，不翻。
+                                        Text(file.fieldName.isEmpty ? L("(未命名字段)") : file.fieldName)
+                                            .font(.body.monospaced().weight(.semibold))
+                                            .foregroundStyle(file.enabled ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                                            .frame(width: 160, alignment: .leading)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(file.effectiveFileName.isEmpty ? L("(未选择文件)") : file.effectiveFileName)
+                                                .font(.body.monospaced())
+                                            Text("\(file.effectiveMimeType) · \(file.filePath.isEmpty ? L("无路径") : file.filePath)")
+                                                .font(.caption.monospaced())
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .truncationMode(.middle)
+                                                .textSelection(.enabled)
+                                        }
+                                        .foregroundStyle(file.enabled ? .primary : .secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .padding(.vertical, 5)
+                                    if index != body.multipartFiles.count - 1 {
+                                        Divider().opacity(0.5)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.5)))
+                        }
+                    }
                 case .json, .raw:
                     SelectableCodeBlock(text: body.text)
                 case .none:
@@ -157,7 +202,7 @@ struct HistoryDetailView: View {
                     .font(.callout).foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(auth.kind.rawValue)
+                    Text(L(auth.kind.rawValue))
                         .font(.callout.weight(.medium))
                     if let preview = auth.headerValue {
                         Text("Authorization: \(preview.prefix(32))…")

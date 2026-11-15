@@ -95,6 +95,40 @@
         }
       }
     },
+    "(未命名字段)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(unnamed field)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(未命名字段)"
+          }
+        }
+      }
+    },
+    "(未选择文件)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(no file chosen)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(未选择文件)"
+          }
+        }
+      }
+    },
     "(空)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -397,6 +431,16 @@
         }
       }
     },
+    "%@（%@）" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@（%2$@）"
+          }
+        }
+      }
+    },
     "%@（已自动重试 %@ 次）" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -537,6 +581,23 @@
     "Apply" : {
 
     },
+    "args 数组内必须全部是字符串" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every element of args must be a string"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "args 数组内必须全部是字符串"
+          }
+        }
+      }
+    },
     "AUTH 失败：%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -591,6 +652,7 @@
       }
     },
     "devkit 会将 SQLite 数据库文件放在你选择的目录，用于保存：HTTP 历史与集合、环境变量、SSH Profiles 元数据、会话与标签分组状态、JSON 文档草稿。所有数据仅保存在本地。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -680,6 +742,23 @@
         }
       }
     },
+    "git 参数数组，不含 git 本身" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git argument array, without the git command itself"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "git 参数数组，不含 git 本身"
+          }
+        }
+      }
+    },
     "Git 管理" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -734,6 +813,7 @@
       }
     },
     "HTTP 记录（已保存请求 / 历史）与终端会话记录均保存在该目录下的 devkit.sqlite3。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -820,6 +900,7 @@
       }
     },
     "macOS 原生开发者工具箱 · 精简、快速" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -834,6 +915,9 @@
           }
         }
       }
+    },
+    "MIME" : {
+
     },
     "Mixed（保留改动不暂存）" : {
       "localizations" : {
@@ -907,6 +991,23 @@
         }
       }
     },
+    "Redis 命令，每行一条" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redis commands, one per line"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redis 命令，每行一条"
+          }
+        }
+      }
+    },
     "Redis 的 db 需为数字（如 0）" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -937,6 +1038,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SELECT 失败：%@"
+          }
+        }
+      }
+    },
+    "server=一次性" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "server=one-shot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "server=一次性"
+          }
+        }
+      }
+    },
+    "session 不是合法的会话 id" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session is not a valid session id"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session 不是合法的会话 id"
+          }
+        }
+      }
+    },
+    "session 与 server 二选一" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pass session or server, not both"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session 与 server 二选一"
+          }
+        }
+      }
+    },
+    "session 与 server 必须二选一" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pass either session or server"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "session 与 server 必须二选一"
           }
         }
       }
@@ -1138,6 +1307,72 @@
     },
     "you@example.com" : {
 
+    },
+    "一次性执行的工作目录（可选；持久会话模式不支持）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working directory for one-shot execution (optional; not supported in persistent-session mode)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一次性执行的工作目录（可选；持久会话模式不支持）"
+          }
+        }
+      }
+    },
+    "上传名" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload as"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传名"
+          }
+        }
+      }
+    },
+    "上传文件不可读（字段 %@）：%@。文件可能已被移动或删除，请重新选择。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload file unreadable (field %@): %@. It may have been moved or deleted. Please select it again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传文件不可读（字段 %@）：%@。文件可能已被移动或删除，请重新选择。"
+          }
+        }
+      }
+    },
+    "上传文件名" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Upload filename"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传文件名"
+          }
+        }
+      }
     },
     "上级目录" : {
       "localizations" : {
@@ -1487,6 +1722,40 @@
         }
       }
     },
+    "仓库 id 或别名" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repository id or alias"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库 id 或别名"
+          }
+        }
+      }
+    },
+    "仓库 id 或别名（来自 git_list_repos）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repository id or alias (from git_list_repos)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库 id 或别名（来自 git_list_repos）"
+          }
+        }
+      }
+    },
     "仓库 URL" : {
       "localizations" : {
         "en" : {
@@ -1553,6 +1822,23 @@
         }
       }
     },
+    "会话 id" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session id"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话 id"
+          }
+        }
+      }
+    },
     "会话不存在（可能已被回收），请重新 ssh_open_session" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1566,6 +1852,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会话不存在（可能已被回收），请重新 ssh_open_session"
+          }
+        }
+      }
+    },
+    "会话保持 shell 状态；空闲 30 分钟或满 2 小时自动回收，超时也会被关闭，届时请重新开会话" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The session keeps shell state; it is recycled automatically after 30 minutes idle or 2 hours alive, and is closed on timeout — open a new session then."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话保持 shell 状态；空闲 30 分钟或满 2 小时自动回收，超时也会被关闭，届时请重新开会话"
           }
         }
       }
@@ -1588,6 +1891,7 @@
       }
     },
     "会话已断开" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1635,6 +1939,23 @@
         }
       }
     },
+    "会话起始目录（可选）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Session starting directory (optional)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话起始目录（可选）"
+          }
+        }
+      }
+    },
     "传输失败：%@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1648,6 +1969,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "传输失败：%@"
+          }
+        }
+      }
+    },
+    "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n工具输出中的 [REDACTED] 是脱敏占位符。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You can operate remote servers and Git repositories through devkit's MCP tools. These tools are proxied by the local devkit app; no IP, username, password, or key will ever be (or can be) provided to you — do not probe or ask for credentials; [REDACTED] in tool output is a redaction placeholder.\n\nServer operations:\n1. ssh_list_servers: list available servers (alias and ID only) and currently active sessions.\n2. ssh_exec with server=alias or ID: one-shot command execution (dedicated connection), best for single queries.\n3. When state must persist across commands (cd / env vars / venv activation): ssh_open_session to open a session →\n   then pass session=sessionID on every ssh_exec → ssh_close_session when done.\n4. Commands time out after 30 seconds by default (timeoutSeconds adjustable 5-600); a persistent session that times out or idles for 30 minutes is closed — just ssh_open_session again.\n5. The remote login shell must be POSIX-family such as bash/sh/zsh; commands must be complete scripts (close line-swallowing constructs like heredocs yourself).\n\nGit operations:\n1. git_list_repos lists registered repositories (id / alias / local path).\n2. git_status shows repository status; git_run takes an args array to run any git subcommand\n   (e.g. [\"pull\"], [\"log\",\"-n\",\"20\"], [\"commit\",\"-m\",\"…\"]).\n3. Repositories with a bound key automatically use the key stored in devkit for fetch / pull / push — no credentials needed.\n\nDatabase operations (MySQL / Redis):\n1. db_list_connections lists saved database connections (id / name / kind / default database).\n2. MySQL: db_query runs SQL (multiple statements allowed, returns TSV table text); Redis: db_command\n   runs commands (command is one per line, e.g. \"SET k v\\nGET k\"). The connection's saved password and default database apply automatically.\n3. Result text is the database's real output; exitCode / isError semantics are as above — read the text before deciding the next step.\n4. Write operations (INSERT / UPDATE / DELETE / FLUSHALL, etc.) take real effect too; always confirm with the user before running them.\n\nGeneral conventions:\n- A non-zero exitCode is a normal result: read stdout / stderr to determine why; don't treat it as a tool failure.\n- timedOut=true means the command timed out; shellExited=true means the remote shell disconnected (the cause is usually in stderr).\n- Prefer one-shot execution; open a session only when cross-command state is truly needed, and close it promptly."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n工具输出中的 [REDACTED] 是脱敏占位符。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。"
           }
         }
       }
@@ -2029,6 +2367,22 @@
         }
       }
     },
+    "先连接所选主机，再经由它转发到本主机；适合本机连不通目标、但能连通跳板机的场景。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect to the selected host first, then reach this host through it; for cases where the target is unreachable directly but the jump host is."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先连接所选主机，再经由它转发到本主机；适合本机连不通目标、但能连通跳板机的场景。"
+          }
+        }
+      }
+    },
     "克隆" : {
       "localizations" : {
         "en" : {
@@ -2158,6 +2512,57 @@
         }
       }
     },
+    "共 %lld 个仓库" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld repositories in total"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共 %lld 个仓库"
+          }
+        }
+      }
+    },
+    "共 %lld 个数据库连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld database connections in total"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共 %lld 个数据库连接"
+          }
+        }
+      }
+    },
+    "共 %lld 台服务器" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld servers in total"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共 %lld 台服务器"
+          }
+        }
+      }
+    },
     "关闭" : {
       "localizations" : {
         "en" : {
@@ -2202,6 +2607,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭（丢弃此空标签）"
+          }
+        }
+      }
+    },
+    "关闭一个持久 SSH 会话（幂等）。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close a persistent SSH session (idempotent)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭一个持久 SSH 会话（幂等）。"
+          }
+        }
+      }
+    },
+    "关闭搜索" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭搜索"
           }
         }
       }
@@ -2253,6 +2691,9 @@
           }
         }
       }
+    },
+    "内容" : {
+
     },
     "内部状态错误" : {
       "extractionState" : "stale",
@@ -2514,6 +2955,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换记事分类（点击选择 SSH 记录）"
+          }
+        }
+      }
+    },
+    "列出 devkit 中已保存的数据库连接（MySQL / Redis：id、名称、类型、默认库）。出于安全考虑不返回主机、用户名等连接信息；后续工具用 id 或名称引用连接。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List database connections saved in devkit (MySQL / Redis: id, name, kind, default database). For security, no connection details (host, username) are returned; later tools refer to connections by id or name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列出 devkit 中已保存的数据库连接（MySQL / Redis：id、名称、类型、默认库）。出于安全考虑不返回主机、用户名等连接信息；后续工具用 id 或名称引用连接。"
+          }
+        }
+      }
+    },
+    "列出 devkit 中已保存的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。出于安全考虑不返回 IP、用户名、端口等任何连接信息；后续工具用 id 或名称引用服务器。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List remote servers saved in devkit (id, name alias, auth kind, default working directory) and the currently open persistent sessions. For security, no connection details (IP, username, port) are returned; later tools refer to servers by id or name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列出 devkit 中已保存的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。出于安全考虑不返回 IP、用户名、端口等任何连接信息；后续工具用 id 或名称引用服务器。"
+          }
+        }
+      }
+    },
+    "列出 devkit 中登记的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List local Git repositories registered in devkit (id, alias, local path, whether an SSH key is bound)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列出 devkit 中登记的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。"
           }
         }
       }
@@ -3172,6 +3664,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "压缩"
+          }
+        }
+      }
+    },
+    "压缩 / 解压失败：%@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archive / extract failed: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩 / 解压失败：%@"
+          }
+        }
+      }
+    },
+    "压缩包内的数据库文件缺失或不是有效的 SQLite 文件" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The database file inside the archive is missing or not a valid SQLite file"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩包内的数据库文件缺失或不是有效的 SQLite 文件"
+          }
+        }
+      }
+    },
+    "压缩包由 devkit %@ 于 %@ 导出。导入将覆盖当前全部记录（含密码与私钥），此操作不可撤销；应用随后自动重启。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exported by devkit %@ on %@. Importing will overwrite all current records (including passwords and keys); this cannot be undone. The app will then relaunch."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩包由 devkit %@ 于 %@ 导出。导入将覆盖当前全部记录（含密码与私钥），此操作不可撤销；应用随后自动重启。"
           }
         }
       }
@@ -3841,6 +4384,57 @@
         }
       }
     },
+    "在指定 MySQL 连接上执行 SQL 并返回表格文本（TSV，NULL 显示为 NULL；无结果集返回 OK）。可多语句，返回最后一条的结果集。默认超时 30 秒（timeoutSeconds 可调 5-600）。仅支持 MySQL 连接；Redis 用 db_command。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run SQL on the given MySQL connection and return tabular text (TSV, NULL shown as NULL; no result set returns OK). Multiple statements allowed; the last result set is returned. Default timeout 30 seconds (timeoutSeconds adjustable 5-600). MySQL connections only; use db_command for Redis."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在指定 MySQL 连接上执行 SQL 并返回表格文本（TSV，NULL 显示为 NULL；无结果集返回 OK）。可多语句，返回最后一条的结果集。默认超时 30 秒（timeoutSeconds 可调 5-600）。仅支持 MySQL 连接；Redis 用 db_command。"
+          }
+        }
+      }
+    },
+    "在指定 Redis 连接上执行命令并返回 redis-cli 风格文本。command 为命令行式字符串，每行一条命令（如 \"SET key value\\nGET key\"），参数含空格用引号包裹。连接配置的密码与 db 号会自动应用（AUTH/SELECT）。默认超时 30 秒（timeoutSeconds 可调 5-600）。仅支持 Redis 连接；MySQL 用 db_query。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run commands on the given Redis connection and return redis-cli-style text. command is a command-line-style string, one command per line (e.g. \"SET key value\\nGET key\"); quote arguments containing spaces. The connection's saved password and db number are applied automatically (AUTH/SELECT). Default timeout 30 seconds (timeoutSeconds adjustable 5-600). Redis connections only; use db_query for MySQL."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在指定 Redis 连接上执行命令并返回 redis-cli 风格文本。command 为命令行式字符串，每行一条命令（如 \"SET key value\\nGET key\"），参数含空格用引号包裹。连接配置的密码与 db 号会自动应用（AUTH/SELECT）。默认超时 30 秒（timeoutSeconds 可调 5-600）。仅支持 Redis 连接；MySQL 用 db_query。"
+          }
+        }
+      }
+    },
+    "在指定仓库目录执行 git 子命令，args 为参数数组（如 [\"pull\"]、[\"log\", \"-n\", \"20\"]、[\"commit\", \"-m\", \"…\"]）。绑定了密钥的仓库，fetch/pull/push 等远程操作会自动使用 devkit 内保存的密钥认证，无需也不提供任何凭据。默认超时 30 秒（timeoutSeconds 可调 5-600）。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run a git subcommand in the given repository directory; args is an argument array (e.g. [\"pull\"], [\"log\", \"-n\", \"20\"], [\"commit\", \"-m\", \"…\"]). For repositories with a bound key, remote operations such as fetch/pull/push automatically use the key stored in devkit — no credentials are needed, and none are provided. Default timeout 30 seconds (timeoutSeconds adjustable 5-600)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在指定仓库目录执行 git 子命令，args 为参数数组（如 [\"pull\"]、[\"log\", \"-n\", \"20\"]、[\"commit\", \"-m\", \"…\"]）。绑定了密钥的仓库，fetch/pull/push 等远程操作会自动使用 devkit 内保存的密钥认证，无需也不提供任何凭据。默认超时 30 秒（timeoutSeconds 可调 5-600）。"
+          }
+        }
+      }
+    },
     "在根目录新建文件夹…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3918,6 +4512,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在访达中显示私钥"
+          }
+        }
+      }
+    },
+    "在远程服务器上执行 shell 命令并返回 exitCode / stdout / stderr。两种方式二选一：传 session（持久会话，状态保留）或传 server（一次性执行，独立连接，cwd 仅此模式可用）。命令应是完整的多行脚本（heredoc 等吞行的写法需自行收尾）。默认超时 30 秒（timeoutSeconds 可调 5-600）：一次性执行超时仅返回部分输出；持久会话超时会被关闭，需重新 ssh_open_session。远端登录 shell 需为 POSIX 系（bash/sh/zsh/ksh 等）。单流输出超 512KB 截断。任何凭据都不会提供，输出中的 [REDACTED] 为脱敏占位符。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run a shell command on a remote server and get exitCode / stdout / stderr back. Choose one of two modes: pass session (persistent session, state kept) or server (one-shot execution, dedicated connection, cwd only available in this mode). The command should be a complete multi-line script (terminate line-swallowing constructs such as heredocs yourself). Default timeout 30 seconds (timeoutSeconds adjustable 5-600): a one-shot timeout returns partial output; a persistent-session timeout closes the session, requiring ssh_open_session again. The remote login shell must be POSIX-family (bash/sh/zsh/ksh, etc.). A single output stream over 512KB is truncated. No credentials are ever provided; [REDACTED] in the output is a redaction placeholder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在远程服务器上执行 shell 命令并返回 exitCode / stdout / stderr。两种方式二选一：传 session（持久会话，状态保留）或传 server（一次性执行，独立连接，cwd 仅此模式可用）。命令应是完整的多行脚本（heredoc 等吞行的写法需自行收尾）。默认超时 30 秒（timeoutSeconds 可调 5-600）：一次性执行超时仅返回部分输出；持久会话超时会被关闭，需重新 ssh_open_session。远端登录 shell 需为 POSIX 系（bash/sh/zsh/ksh 等）。单流输出超 512KB 截断。任何凭据都不会提供，输出中的 [REDACTED] 为脱敏占位符。"
           }
         }
       }
@@ -4275,6 +4886,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "字段"
+          }
+        }
+      }
+    },
+    "字段名" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Field name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字段名"
           }
         }
       }
@@ -4712,6 +5339,22 @@
         }
       }
     },
+    "导入并覆盖" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import & Overwrite"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入并覆盖"
+          }
+        }
+      }
+    },
     "导入私钥" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4725,6 +5368,88 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入私钥"
+          }
+        }
+      }
+    },
+    "导入配置压缩包？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import config archive?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入配置压缩包？"
+          }
+        }
+      }
+    },
+    "导入配置压缩包…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Config Archive…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入配置压缩包…"
+          }
+        }
+      }
+    },
+    "导出" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出"
+          }
+        }
+      }
+    },
+    "导出配置压缩包" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Config Archive"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出配置压缩包"
+          }
+        }
+      }
+    },
+    "导出配置压缩包…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Config Archive…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出配置压缩包…"
           }
         }
       }
@@ -4795,7 +5520,42 @@
         }
       }
     },
+    "将把数据库与密钥复制到「%@」并切换过去，应用随后自动重启。当前目录里的文件会原样保留。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The database and keys will be copied to \"%@\" and used from there; the app will then relaunch. Files in the current directory are kept as is."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将把数据库与密钥复制到「%@」并切换过去，应用随后自动重启。当前目录里的文件会原样保留。"
+          }
+        }
+      }
+    },
+    "将把数据库与密钥复制回默认目录（%@）并切换过去，应用随后自动重启。当前目录里的文件会原样保留。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The database and keys will be copied back to the default directory (%@) and used from there; the app will then relaunch. Files in the current directory are kept as is."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将把数据库与密钥复制回默认目录（%@）并切换过去，应用随后自动重启。当前目录里的文件会原样保留。"
+          }
+        }
+      }
+    },
     "将断开当前数据库并回到首次启动引导，重新选择目录。磁盘上已有的数据文件不会被删除。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4862,6 +5622,7 @@
       }
     },
     "尚未选择目录" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5187,6 +5948,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已取消（%@/%@ 项）"
+          }
+        }
+      }
+    },
+    "已导出：%@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exported: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导出：%@"
           }
         }
       }
@@ -5658,6 +6436,54 @@
         }
       }
     },
+    "恢复默认并重启" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore Default & Restart"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认并重启"
+          }
+        }
+      }
+    },
+    "恢复默认数据目录？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore default data directory?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认数据目录？"
+          }
+        }
+      }
+    },
+    "恢复默认目录…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore Default Directory…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复默认目录…"
+          }
+        }
+      }
+    },
     "意外的关键字" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5725,6 +6551,22 @@
         }
       }
     },
+    "所有记录（含密码与私钥）均保存在该目录下的 devkit.sqlite3 与 ssh_keys/、git_keys/ 内；导出的配置压缩包同样包含凭据，请妥善保管。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All records (including passwords and keys) are stored in devkit.sqlite3 and ssh_keys/, git_keys/ inside this directory; exported archives contain credentials too — keep them safe."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有记录（含密码与私钥）均保存在该目录下的 devkit.sqlite3 与 ssh_keys/、git_keys/ 内；导出的配置压缩包同样包含凭据，请妥善保管。"
+          }
+        }
+      }
+    },
     "打开" : {
       "localizations" : {
         "en" : {
@@ -5770,6 +6612,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开一个新的 HTTP 标签"
+          }
+        }
+      }
+    },
+    "打开到指定服务器的持久 SSH 会话。会话保持真实 shell 状态：cd、环境变量、venv 激活等跨命令保留。cwd 可选（会话起始目录，不存在会报错）。会话空闲 30 分钟或存活满 2 小时会被自动回收；并发上限 8 个。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a persistent SSH session to the given server. The session keeps a real shell state: cd, environment variables, venv activation, etc. persist across commands. cwd is optional (starting directory; an error is raised if it does not exist). Sessions are recycled automatically after 30 minutes idle or 2 hours alive; at most 8 concurrent sessions."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开到指定服务器的持久 SSH 会话。会话保持真实 shell 状态：cd、环境变量、venv 激活等跨命令保留。cwd 可选（会话起始目录，不存在会报错）。会话空闲 30 分钟或存活满 2 小时会被自动回收；并发上限 8 个。"
           }
         }
       }
@@ -5869,6 +6728,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "执行超时，连接已断开"
+          }
+        }
+      }
+    },
+    "找不到仓库「%@」；请先 git_list_repos 查看已登记的仓库" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repository \"%@\" not found; call git_list_repos first to see registered repositories"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到仓库「%@」；请先 git_list_repos 查看已登记的仓库"
+          }
+        }
+      }
+    },
+    "找不到数据库连接「%@」；请先 db_list_connections 查看可用连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Database connection \"%@\" not found; call db_list_connections first to see available connections"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到数据库连接「%@」；请先 db_list_connections 查看可用连接"
+          }
+        }
+      }
+    },
+    "找不到服务器「%@」；请先 ssh_list_servers 查看可用服务器" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server \"%@\" not found; call ssh_list_servers first to see available servers"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到服务器「%@」；请先 ssh_list_servers 查看可用服务器"
           }
         }
       }
@@ -6056,6 +6966,40 @@
         }
       }
     },
+    "持久会话 id（与 server 二选一）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persistent session id (either this or server)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "持久会话 id（与 server 二选一）"
+          }
+        }
+      }
+    },
+    "持久会话模式不支持 cwd，请在命令里自行 cd" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "cwd is not supported in persistent-session mode; cd within the command yourself"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "持久会话模式不支持 cwd，请在命令里自行 cd"
+          }
+        }
+      }
+    },
     "指数部分缺少数字" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6218,6 +7162,22 @@
         }
       }
     },
+    "搜索" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
+    },
     "搜索 历史（URL / 方法）" : {
       "localizations" : {
         "en" : {
@@ -6230,6 +7190,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索 历史（URL / 方法）"
+          }
+        }
+      }
+    },
+    "搜索…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索…"
+          }
+        }
+      }
+    },
+    "搜索（⌘F）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search (⌘F)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索（⌘F）"
           }
         }
       }
@@ -6501,6 +7494,7 @@
       }
     },
     "数据存储目录" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6668,6 +7662,23 @@
         }
       }
     },
+    "文件" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
+        }
+      }
+    },
     "文件夹" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6749,6 +7760,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文本 / 树形双视图编辑、格式化、校验、键排序。"
+          }
+        }
+      }
+    },
+    "文本字段" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text fields"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本字段"
           }
         }
       }
@@ -7012,6 +8040,9 @@
         }
       }
     },
+    "新建记事" : {
+
+    },
     "新建记录" : {
       "localizations" : {
         "en" : {
@@ -7154,6 +8185,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无内容差异"
+          }
+        }
+      }
+    },
+    "无匹配" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matches"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无匹配"
+          }
+        }
+      }
+    },
+    "无文件" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无文件"
           }
         }
       }
@@ -7360,6 +8424,23 @@
         }
       }
     },
+    "无路径" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "no path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无路径"
+          }
+        }
+      }
+    },
     "是否想写 %@？" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7491,6 +8572,22 @@
         }
       }
     },
+    "暂无文件" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无文件"
+          }
+        }
+      }
+    },
     "暂无条目" : {
       "localizations" : {
         "en" : {
@@ -7525,6 +8622,7 @@
       }
     },
     "更换…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7585,6 +8683,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务器"
+          }
+        }
+      }
+    },
+    "服务器 id 或名称，一次性执行（与 session 二选一）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server id or name, one-shot execution (either this or session)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务器 id 或名称，一次性执行（与 session 二选一）"
+          }
+        }
+      }
+    },
+    "服务器 id 或名称（来自 ssh_list_servers）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server id or name (from ssh_list_servers)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务器 id 或名称（来自 ssh_list_servers）"
           }
         }
       }
@@ -7826,6 +8958,23 @@
         }
       }
     },
+    "未知工具：%@。可用工具见 tools/list。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown tool: %@. See tools/list for available tools."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知工具：%@。可用工具见 tools/list。"
+          }
+        }
+      }
+    },
     "未知错误" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7962,6 +9111,7 @@
       }
     },
     "未选择连接" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8140,6 +9290,55 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "构造并发送 HTTP 请求，查看响应与历史记录。"
+          }
+        }
+      }
+    },
+    "查找上一个" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Previous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找上一个"
+          }
+        }
+      }
+    },
+    "查找下一个" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find Next"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查找下一个"
+          }
+        }
+      }
+    },
+    "查看某仓库的工作区状态：当前分支、上游、ahead/behind、变更文件列表、是否变基中。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the working-tree status of a repository: current branch, upstream, ahead/behind, changed files, and whether a rebase is in progress."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看某仓库的工作区状态：当前分支、上游、ahead/behind、变更文件列表、是否变基中。"
           }
         }
       }
@@ -8393,6 +9592,7 @@
       }
     },
     "欢迎使用 devkit" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8436,6 +9636,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在启动 devkit…"
+          }
+        }
+      }
+    },
+    "正在处理…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Working…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在处理…"
           }
         }
       }
@@ -8754,6 +9970,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加到分组"
+          }
+        }
+      }
+    },
+    "添加文件" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add file"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文件"
           }
         }
       }
@@ -9280,6 +10512,7 @@
       }
     },
     "目录权限：devkit 只在你选择的目录内创建/读写 `devkit.sqlite3`，不会访问其他位置。可在设置中随时更换目录。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9291,6 +10524,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目录权限：devkit 只在你选择的目录内创建/读写 `devkit.sqlite3`，不会访问其他位置。可在设置中随时更换目录。"
+          }
+        }
+      }
+    },
+    "目标位置已存在：%@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destination already exists: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标位置已存在：%@"
           }
         }
       }
@@ -9307,6 +10557,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目标目录"
+          }
+        }
+      }
+    },
+    "直连（不使用跳板）" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Direct (no jump host)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直连（不使用跳板）"
           }
         }
       }
@@ -9585,6 +10851,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "端点"
+          }
+        }
+      }
+    },
+    "第 %@ / %@ 个匹配" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Match %1$@ of %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %@ / %@ 个匹配"
           }
         }
       }
@@ -9968,6 +11251,125 @@
         }
       }
     },
+    "缺少 args 参数（git 参数数组）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing args parameter (git argument array)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 args 参数（git 参数数组）"
+          }
+        }
+      }
+    },
+    "缺少 command 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing command parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 command 参数"
+          }
+        }
+      }
+    },
+    "缺少 connection 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing connection parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 connection 参数"
+          }
+        }
+      }
+    },
+    "缺少 repo 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing repo parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 repo 参数"
+          }
+        }
+      }
+    },
+    "缺少 server 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing server parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 server 参数"
+          }
+        }
+      }
+    },
+    "缺少 sql 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing sql parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 sql 参数"
+          }
+        }
+      }
+    },
+    "缺少合法的 session 参数" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing a valid session parameter"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少合法的 session 参数"
+          }
+        }
+      }
+    },
     "缺少结束的 \"" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10105,7 +11507,6 @@
       }
     },
     "自定义" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10170,6 +11571,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "行格式错误"
+          }
+        }
+      }
+    },
+    "要执行的 shell 命令 / 多行脚本" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shell command / multi-line script to run"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要执行的 shell 命令 / 多行脚本"
+          }
+        }
+      }
+    },
+    "要执行的 SQL（可多语句，分号分隔）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SQL to run (multiple statements allowed, semicolon-separated)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要执行的 SQL（可多语句，分号分隔）"
           }
         }
       }
@@ -10288,6 +11723,9 @@
           }
         }
       }
+    },
+    "记事名称" : {
+
     },
     "记事本" : {
       "localizations" : {
@@ -10462,6 +11900,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该请求不含 Body。"
+          }
+        }
+      }
+    },
+    "该连接经由密码认证的跳板机；系统 ssh 批处理模式下无法交互输入跳板密码。请为跳板机改用私钥认证，或直接在 SSH 终端中连接。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This connection goes through a password-authenticated jump host, but the system ssh batch mode cannot prompt for the jump host password. Use key authentication for the jump host, or connect from the SSH terminal directly."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该连接经由密码认证的跳板机；系统 ssh 批处理模式下无法交互输入跳板密码。请为跳板机改用私钥认证，或直接在 SSH 终端中连接。"
           }
         }
       }
@@ -10733,6 +12188,23 @@
         }
       }
     },
+    "超时秒数，5-600，默认 30（可选）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timeout in seconds, 5-600, default 30 (optional)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超时秒数，5-600，默认 30（可选）"
+          }
+        }
+      }
+    },
     "跟随系统" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10815,6 +12287,39 @@
         }
       }
     },
+    "跳板机" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jump host"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳板机"
+          }
+        }
+      }
+    },
+    "跳板机记录的私钥文件缺失，请重新编辑该跳板机记录并选择私钥。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The jump host's private key file is missing. Edit that jump host record and select the key again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳板机记录的私钥文件缺失，请重新编辑该跳板机记录并选择私钥。"
+          }
+        }
+      }
+    },
     "跳转到最后一个标签" : {
       "localizations" : {
         "en" : {
@@ -10893,6 +12398,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入要执行的命令…"
+          }
+        }
+      }
+    },
+    "迁移到新目录…" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Migrate to New Directory…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "迁移到新目录…"
+          }
+        }
+      }
+    },
+    "迁移并重启" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Migrate & Restart"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "迁移并重启"
+          }
+        }
+      }
+    },
+    "迁移数据目录？" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Migrate data directory?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "迁移数据目录？"
           }
         }
       }
@@ -11063,7 +12616,25 @@
         }
       }
     },
+    "这不是 devkit 导出的配置压缩包（缺少清单或内容目录）。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is not a devkit config archive (manifest or content folder missing)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是 devkit 导出的配置压缩包（缺少清单或内容目录）。"
+          }
+        }
+      }
+    },
     "进入 devkit" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11242,6 +12813,23 @@
         }
       }
     },
+    "连接 id 或名称（来自 db_list_connections）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection id or name (from db_list_connections)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接 id 或名称（来自 db_list_connections）"
+          }
+        }
+      }
+    },
     "连接 MySQL / Redis，命令行式执行 SQL 与命令，也可供 AI 通过本地接口使用。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11255,6 +12843,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接 MySQL / Redis，命令行式执行 SQL 与命令，也可供 AI 通过本地接口使用。"
+          }
+        }
+      }
+    },
+    "连接「%@」是 MySQL 连接；Redis 命令请用 db_command 的 Redis 连接，SQL 请用 db_query" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection \"%@\" is a MySQL connection; run Redis commands via db_command on a Redis connection, and SQL via db_query"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接「%@」是 MySQL 连接；Redis 命令请用 db_command 的 Redis 连接，SQL 请用 db_query"
+          }
+        }
+      }
+    },
+    "连接「%@」是 Redis 连接；SQL 请用 db_query 的 MySQL 连接，Redis 命令请用 db_command" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection \"%@\" is a Redis connection; run SQL via db_query on a MySQL connection, and Redis commands via db_command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接「%@」是 Redis 连接；SQL 请用 db_query 的 MySQL 连接，Redis 命令请用 db_command"
           }
         }
       }
@@ -11559,6 +13181,40 @@
         }
       }
     },
+    "选择文件" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select file"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件"
+          }
+        }
+      }
+    },
+    "选择新的 devkit 数据目录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a new devkit data directory"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择新的 devkit 数据目录"
+          }
+        }
+      }
+    },
     "选择父目录" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11610,6 +13266,7 @@
       }
     },
     "选择目录…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11659,6 +13316,23 @@
         }
       }
     },
+    "选择要导入的配置压缩包" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a config archive to import"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要导入的配置压缩包"
+          }
+        }
+      }
+    },
     "选择连接" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -11689,6 +13363,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通用"
+          }
+        }
+      }
+    },
+    "配置压缩包内容异常：%@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Config archive content is invalid: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置压缩包内容异常：%@"
+          }
+        }
+      }
+    },
+    "配置压缩包格式（%@）不被当前版本支持。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Config archive format (%@) is not supported by this version."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置压缩包格式（%@）不被当前版本支持。"
           }
         }
       }
@@ -11986,6 +13694,7 @@
       }
     },
     "重新选择数据目录…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12002,6 +13711,7 @@
       }
     },
     "重置" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12018,6 +13728,7 @@
       }
     },
     "重置数据目录？" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12034,6 +13745,7 @@
       }
     },
     "重置数据目录…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

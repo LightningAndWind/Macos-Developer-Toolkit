@@ -15,8 +15,8 @@ enum JSONViewMode: String, CaseIterable, Codable {
 
     var label: String {
         switch self {
-        case .code: return "文本"
-        case .tree: return "树形"
+        case .code: return L("文本")
+        case .tree: return L("树形")
         }
     }
 }
@@ -65,6 +65,51 @@ final class JSONTool: DevkitTool {
 
     /// 行数（空文档记 1）。
     var lineCount: Int { text.components(separatedBy: .newlines).count }
+
+    // MARK: 搜索（瞬时状态，不进会话快照）
+
+    /// 搜索栏是否可见。
+    var isSearchVisible = false
+
+    /// 鼠标是否悬停在悬浮搜索栏上；编辑器据此让出 I 型光标控制权
+    /// （NSTextView 的光标跟踪区不理会上层浮层，需显式抑制）。
+    var isPointerOverFindBar = false
+
+    /// 搜索关键字（大小写不敏感子串匹配）。
+    var searchQuery = ""
+
+    /// 当前关键字在文本中的命中总数；由编辑器侧（Coordinator）重算后回写，UI 只读。
+    var searchMatchCount = 0
+
+    /// 当前聚焦的命中序号（0 基，编辑器据此选中并滚动定位）。
+    var searchMatchIndex = 0
+
+    /// 唤出搜索栏：树形模式下先切回文本视图（搜索只在文本编辑器里做）。
+    func openSearch() {
+        viewMode = .code
+        isSearchVisible = true
+    }
+
+    /// 关闭搜索栏并清空搜索状态。
+    func closeSearch() {
+        isSearchVisible = false
+        isPointerOverFindBar = false
+        searchQuery = ""
+        searchMatchCount = 0
+        searchMatchIndex = 0
+    }
+
+    /// 跳到下一个命中（到尾回绕）；无命中时无操作。
+    func nextSearchMatch() {
+        guard searchMatchCount > 0 else { return }
+        searchMatchIndex = (searchMatchIndex + 1) % searchMatchCount
+    }
+
+    /// 跳到上一个命中（到头回绕）；无命中时无操作。
+    func previousSearchMatch() {
+        guard searchMatchCount > 0 else { return }
+        searchMatchIndex = (searchMatchIndex - 1 + searchMatchCount) % searchMatchCount
+    }
 
     init() {}
 

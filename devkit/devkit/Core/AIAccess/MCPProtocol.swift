@@ -86,7 +86,7 @@ nonisolated extension MCPJSON: Codable {
         } else if let o = try? container.decode([String: MCPJSON].self) {
             self = .object(o)
         } else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "不支持的 JSON 值")
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: L("不支持的 JSON 值"))
         }
     }
 

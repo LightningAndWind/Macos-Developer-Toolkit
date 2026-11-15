@@ -226,12 +226,18 @@ enum SSHProfileStore {
 
     /// 删除连接：移除记录 + 其私钥文件 + 该记录分类下的全部记事（记事本随记录级联清理，
     /// 孤儿记事没有意义且会让面板分类器出现「已删除记录」的空分类）。
+    /// 若它正被别的记录用作跳板机，把引用方的 `jumpProfileID` 置空（降级为直连），
+    /// 不让删除留下悬空引用。
     static func delete(_ id: UUID) {
         guard DatabaseManager.shared.isOpen else { return }
         if let profile = load(id: id), let keyFile = profile.privateKeyFileName {
             SSHKeyStorage.delete(fileName: keyFile)
         }
         TerminalNoteStore.shared.deleteAll(inProfile: id)
+        for var referencing in allRequests() where referencing.jumpProfileID == id {
+            referencing.jumpProfileID = nil
+            try? save(referencing)
+        }
         try? DatabaseManager.shared.run("DELETE FROM ssh_profiles WHERE id = ?;", bind: [.text(id.uuidString)])
         invalidateSummaries()
     }

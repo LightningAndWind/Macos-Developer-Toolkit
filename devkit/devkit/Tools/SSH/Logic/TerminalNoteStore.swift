@@ -92,11 +92,11 @@ final class TerminalNoteStore {
 
     // MARK: - 写入
 
-    /// 在指定分类下新建一条空白记事；db 未打开返回 nil。
+    /// 在指定分类下新建一条记事；标题与内容由「新建弹窗」保存时一次带入（取消不落库）；db 未打开返回 nil。
     @discardableResult
-    func create(profileID: UUID? = nil) -> TerminalNote? {
+    func create(profileID: UUID? = nil, title: String = "", content: String = "") -> TerminalNote? {
         guard DatabaseManager.shared.isOpen else { return nil }
-        let note = TerminalNote(id: UUID(), profileID: profileID, title: "", content: "",
+        let note = TerminalNote(id: UUID(), profileID: profileID, title: title, content: content,
                                 createdAt: .now, updatedAt: .now)
         try? DatabaseManager.shared.run(
             "INSERT INTO terminal_notes(id, profile_id, title, content, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?);",

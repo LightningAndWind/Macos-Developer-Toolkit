@@ -10,8 +10,6 @@ import SwiftUI
 
 /// App 生命周期阶段。
 enum AppPhase: Equatable {
-    /// 未选择数据目录：必须展示引导页
-    case needsOnboarding
     /// 正在尝试打开数据库（启动恢复期）
     case booting
     /// 就绪：可以进入主界面
@@ -58,18 +56,20 @@ final class AppState {
 
     // MARK: - Boot flow
 
-    /// App 启动流程：偏好→沙盒访问→打开 db→恢复 session→`.ready`。
+    /// App 启动流程：解析数据目录（未迁移过则直接用默认目录，不再强制选择）→
+    /// 打开 db → 恢复 session → `.ready`。
     func bootstrap() async {
         phase = .booting
-        // 开发调试：设置 DEVKIT_DATA_DIR 可直接跳过引导页（仅 DEBUG 构建生效）。
-        // 数据目录走 ephemeral（仅本进程）：persist 会把临时路径写进真实 defaults，
+        // 开发调试：设置 DEVKIT_DATA_DIR 可指定临时数据目录（仅 DEBUG 构建生效）。
+        // 数据目录走 ephemeral（仅本进程）：持久化会把临时路径写进真实 defaults，
         // 之后正常启动读到已删除的临时目录 → 「Failed to open database」启动失败。
         #if DEBUG
         if let envDir = ProcessInfo.processInfo.environment["DEVKIT_DATA_DIR"],
            !envDir.isEmpty {
             let dir = URL(fileURLWithPath: envDir, isDirectory: true)
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            completeOnboarding(with: dir, persist: false)
+            AppPreferences.shared.setEphemeralDataDirectory(dir)
+            openDatabaseAndRestore(at: dir)
             seedDemoSessionIfRequested()
             openSettingsIfRequested()
             DebugSnapshot.runIfRequested(appState: self)
@@ -79,14 +79,21 @@ final class AppState {
             return
         }
         #endif
-        guard let dir = AppPreferences.shared.dataDirectoryURL,
-              let dbFile = AppPreferences.shared.databaseFileURL else {
-            phase = .needsOnboarding
+        let dir: URL
+        do {
+            dir = try AppPreferences.shared.resolvedDataDirectoryURL()
+        } catch {
+            phase = .failed(error.localizedDescription)
             return
         }
         AppPreferences.shared.beginAccessing(dir)
+        openDatabaseAndRestore(at: dir)
+    }
+
+    /// 在指定目录打开数据库并恢复会话；失败进入 `.failed`。
+    private func openDatabaseAndRestore(at directory: URL) {
         do {
-            try DatabaseManager.shared.open(at: dbFile)
+            try DatabaseManager.shared.open(at: directory.appendingPathComponent("devkit.sqlite3"))
             SSHProfileStore.invalidateProfileSummaries()
             restoreSession()
             phase = .ready
@@ -94,34 +101,6 @@ final class AppState {
         } catch {
             phase = .failed(error.localizedDescription)
         }
-    }
-
-    /// 引导页完成：保存书签 + 建库 + 恢复空会话。
-    /// `persist = false` 时数据目录仅本进程生效（自检 / 冒烟），不写任何偏好。
-    func completeOnboarding(with directory: URL, persist: Bool = true) {
-        do {
-            if persist {
-                try AppPreferences.shared.setDataDirectory(directory)
-            } else {
-                AppPreferences.shared.setEphemeralDataDirectory(directory)
-            }
-            let dbFile = directory.appendingPathComponent("devkit.sqlite3")
-            try DatabaseManager.shared.open(at: dbFile)
-            SSHProfileStore.invalidateProfileSummaries()
-            restoreSession()
-            phase = .ready
-            AIAccessServer.shared.autostartIfNeeded()
-        } catch {
-            phase = .failed(error.localizedDescription)
-        }
-    }
-
-    /// 重置数据目录设置（用于设置页；不删除实际文件）。
-    func resetDataDirectory() {
-        AIAccessServer.shared.shutdown()
-        DatabaseManager.shared.close()
-        AppPreferences.shared.clearDataDirectory()
-        phase = .needsOnboarding
     }
 
     #if DEBUG

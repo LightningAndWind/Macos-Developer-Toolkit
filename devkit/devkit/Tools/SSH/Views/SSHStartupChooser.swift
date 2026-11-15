@@ -48,11 +48,11 @@ struct SSHStartupChooser: View {
 
             // 块①：本地 + 新建记录
             HStack(spacing: 10) {
-                primaryCard(icon: "house", title: "本地终端", subtitle: "本机 shell · 个人目录") {
+                primaryCard(icon: "house", title: L("本地终端"), subtitle: L("本机 shell · 个人目录")) {
                     appState.sshTool(forTab: tabID)?.startLocal()
                     onDismiss()
                 }
-                primaryCard(icon: "plus.square.on.square", title: "新建记录", subtitle: "本地目录或 SSH 主机") {
+                primaryCard(icon: "plus.square.on.square", title: L("新建记录"), subtitle: L("本地目录或 SSH 主机")) {
                     beginNew()
                 }
             }

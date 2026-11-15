@@ -65,6 +65,9 @@ struct SSHProfile: Identifiable, Hashable, Codable {
     var privateKeyFileName: String?
     /// 私钥认证：PEM 口令（明文，可选；加密私钥才需要）。
     var keyPassphrase: String?
+    /// 跳板机：先连接该记录所指主机，再经由它转发到本机（`nil` = 直连）。
+    /// 仅允许引用「自身不经过跳板」的远程记录（单跳，防环）；目标不可达、本机可达跳板的场景用它。
+    var jumpProfileID: UUID?
     var createdAt: Date = .now
     var updatedAt: Date = .now
 
@@ -130,7 +133,7 @@ struct SSHProfile: Identifiable, Hashable, Codable {
 
 extension SSHProfile {
     /// 自定义解码（放在扩展里，保留编译器合成的逐成员初始化器）。
-    /// 后补字段 `kind` / `workingDirectory` 用 `decodeIfPresent` 兜底，其余字段维持严格解码。
+    /// 后补字段 `kind` / `workingDirectory` / `jumpProfileID` 用 `decodeIfPresent` 兜底，其余字段维持严格解码。
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -145,6 +148,7 @@ extension SSHProfile {
         password = try c.decodeIfPresent(String.self, forKey: .password)
         privateKeyFileName = try c.decodeIfPresent(String.self, forKey: .privateKeyFileName)
         keyPassphrase = try c.decodeIfPresent(String.self, forKey: .keyPassphrase)
+        jumpProfileID = try c.decodeIfPresent(UUID.self, forKey: .jumpProfileID)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
     }

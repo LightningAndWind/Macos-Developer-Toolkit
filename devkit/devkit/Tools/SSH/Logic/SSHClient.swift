@@ -3,7 +3,7 @@
 //  devkit
 //
 //  M4：基于 NIOSSH 的进程内 SSH 客户端。保持 App Sandbox（网络经 network.client）。
-//  连接 → 认证（密码 / PEM 私钥）→ 打开 session 通道 → 申请 pty + shell。
+//  连接（直连 / 经跳板隧道，见 SSHCarrierBuilder）→ 认证（密码 / PEM 私钥）→ 打开 session 通道 → 申请 pty + shell。
 //  远端输出经 AsyncStream 交主线程喂给 SwiftTerm；本地键入经 write(_:) 下发；resize 发窗口变更。
 //
 //  注意：工程默认 actor 隔离为 MainActor，故所有被 NIO 从事件循环调用的类型（处理器 / 委托）
@@ -78,45 +78,45 @@ final class SSHClient {
     // MARK: - 连接
 
     /// 连接并进入交互 shell。失败/拒绝信任时更新 `state`，不抛出。
+    /// 记录配置了跳板机时经跳板隧道承载（见 `SSHCarrierBuilder`）；TOFU 覆盖跳板与目标两台主机。
     func connect(profile: SSHProfile, cols: Int, rows: Int) async {
         guard !state.isLive else { return }
         // 先换新流再连接：上一条流的终止（消费任务被 cancel / 已 finish）不影响本次会话。
         rebuildOutputStream()
         state = .connecting
 
-        // TOFU：未信任主机先询问；拒绝则中止。
-        if !SSHHostKeyStore.isTrusted(host: profile.host, port: profile.port) {
-            let trusted = await (trustHandler?(profile.host, profile.port) ?? false)
-            guard trusted else {
-                state = .failed("未信任该主机，连接已取消")
-                return
+        // 跳板记录：nil = 直连（未配置 / 引用失效均按直连容错）。
+        let jumpProfile = SSHJumpSupport.resolveJump(for: profile)
+
+        // TOFU：先跳板后目标依次询问；任一被拒即中止。
+        var trustTargets: [(host: String, port: Int)] = [(profile.host, profile.port)]
+        if let jumpProfile { trustTargets.insert((jumpProfile.host, jumpProfile.port), at: 0) }
+        for target in trustTargets {
+            if !SSHHostKeyStore.isTrusted(host: target.host, port: target.port) {
+                let trusted = await (trustHandler?(target.host, target.port) ?? false)
+                guard trusted else {
+                    state = .failed("未信任该主机，连接已取消")
+                    return
+                }
+                SSHHostKeyStore.trust(host: target.host, port: target.port)
             }
-            SSHHostKeyStore.trust(host: profile.host, port: profile.port)
         }
 
         do {
             let auth = try makeUserAuthDelegate(for: profile)
+            let jumpAuth = try jumpProfile.map { try makeUserAuthDelegate(for: $0) }
 
-            let bootstrap = ClientBootstrap(group: group)
-                .channelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        let ssh = NIOSSHHandler(
-                            role: .client(
-                                .init(userAuthDelegate: auth,
-                                      serverAuthDelegate: AcceptAllHostKeysDelegate())
-                            ),
-                            allocator: channel.allocator,
-                            inboundChildChannelInitializer: nil
-                        )
-                        try channel.pipeline.syncOperations.addHandler(ssh)
-                    }
-                }
-                .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-
-            let conn = try await connectWithRetry {
-                try await bootstrap.connect(host: profile.host, port: profile.port).get()
+            // 直连与跳板统一走 SSHCarrierBuilder（返回承载目标 SSH 的通道 + 最外层通道）；
+            // 瞬时不可达自动重试覆盖整段建立过程（含跳板 TCP 连接）。
+            let established = try await connectWithRetry {
+                try await SSHCarrierBuilder.establish(profile: profile,
+                                                      jumpProfile: jumpProfile,
+                                                      targetAuth: auth,
+                                                      jumpAuth: jumpAuth,
+                                                      group: self.group)
             }
-            nio.connectionChannel = conn
+            nio.rootChannel = established.rootChannel
+            nio.carrierChannel = established.carrierChannel
 
             // 本次连接专属的关闭信号；onClose 直接捕获它（AsyncSignal 是 Sendable），
             // 这样既不受重连影响，也免去一次「hop 回主线程再读信号」的绕路。
@@ -126,7 +126,7 @@ final class SSHClient {
             // 捕获「本次连接」的 continuation 而非回头读 self 属性：重连后属性已指向新流，
             // 旧连接迟到的字节应落进旧流（随之丢弃），不能串进新会话的终端。
             let continuation = outputContinuation
-            let shell = try await Self.openShell(on: conn, cols: cols, rows: rows,
+            let shell = try await Self.openShell(on: established.carrierChannel, cols: cols, rows: rows,
                                                  output: { bytes in continuation.yield(bytes) },
                                                  onClose: { signal.fire() })
             nio.shellChannel = shell
@@ -162,8 +162,9 @@ final class SSHClient {
     /// （与数据库工具 connectMySQL / RedisSession.connect 的同源重试语义一致。）
     private static let connectRetryDelays: [TimeInterval] = [1.0, 2.0, 3.0, 4.0, 5.0]
 
-    /// 带自动重试的 TCP 连接：仅对「瞬时不可达 / DNS 瞬败」重试，其余错误照常上抛。
-    private func connectWithRetry(_ connect: () async throws -> Channel) async throws -> Channel {
+    /// 带自动重试的连接（直连为 TCP socket，经跳板为整段隧道建立）：仅对「瞬时不可达 /
+    /// DNS 瞬败」重试，其余错误照常上抛。
+    private func connectWithRetry<T>(_ connect: () async throws -> T) async throws -> T {
         var delays = Self.connectRetryDelays
         connectAttempt = 0
         while true {
@@ -310,8 +311,10 @@ final class SSHClient {
     private func teardownChannels() {
         nio.shellChannel?.close(mode: .all, promise: nil)
         nio.shellChannel = nil
-        nio.connectionChannel?.close(mode: .all, promise: nil)
-        nio.connectionChannel = nil
+        nio.carrierChannel?.close(mode: .all, promise: nil)
+        nio.carrierChannel = nil
+        nio.rootChannel?.close(mode: .all, promise: nil)
+        nio.rootChannel = nil
     }
 
     deinit {
@@ -331,7 +334,10 @@ final class SSHClient {
 /// - `SSHClient` 又是 `@MainActor` 隔离的，nonisolated 的 deinit 根本读不到它的可变属性。
 /// 放进本类后，deinit 读的就是普通存储属性，且不受 actor 隔离约束。
 private nonisolated final class NIOResources: @unchecked Sendable {
-    var connectionChannel: Channel?
+    /// 最外层通道：直连 = 目标 socket；经跳板 = 跳板 TCP 连接（必须与 carrier 一同关闭）。
+    var rootChannel: Channel?
+    /// 承载目标 NIOSSHHandler 的通道：直连与 rootChannel 相同；经跳板 = direct-tcpip 子通道。
+    var carrierChannel: Channel?
     var shellChannel: Channel?
 
     /// 当前连接的关闭信号。**每次连接都换新的**（见 `SSHClient.connect`）：
@@ -348,7 +354,8 @@ private nonisolated final class NIOResources: @unchecked Sendable {
         // 不至于把一个挂起的 Task 一直留到进程结束。
         closeSignal.fire()
         shellChannel?.close(mode: .all, promise: nil)
-        connectionChannel?.close(mode: .all, promise: nil)
+        carrierChannel?.close(mode: .all, promise: nil)
+        rootChannel?.close(mode: .all, promise: nil)
         // 阻塞式收尾：会短暂占用调用线程（通常是主线程）。若后续发现关标签时有可感知卡顿，
         // 可换成非阻塞的 `group.shutdownGracefully { _ in }`。
         try? group.syncShutdownGracefully()
@@ -409,13 +416,6 @@ private nonisolated final class SSHShellHandler: ChannelDuplexHandler, @unchecke
     nonisolated func channelInactive(context: ChannelHandlerContext) {
         onClose()
         context.fireChannelInactive()
-    }
-}
-
-/// 主机密钥已在连接前按 host:port 维度完成 TOFU 询问，故此处直接放行。
-private nonisolated final class AcceptAllHostKeysDelegate: NIOSSHClientServerAuthenticationDelegate {
-    nonisolated func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
-        validationCompletePromise.succeed(())
     }
 }
 

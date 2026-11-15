@@ -53,6 +53,15 @@ final class DatabaseManager: @unchecked Sendable {
         _closeLocked()
     }
 
+    /// 生成一致性快照到目标路径（`VACUUM INTO`）：导出配置压缩包 / 迁移数据目录时使用。
+    /// WAL 模式下也能得到合并后的完整单文件；目标文件已存在时会失败，调用方须给全新路径。
+    func snapshot(to url: URL) throws {
+        lock.lock(); defer { lock.unlock() }
+        guard db != nil else { throw DatabaseError.notOpen }
+        let escaped = url.path.replacingOccurrences(of: "'", with: "''")
+        try _execLocked("VACUUM INTO '\(escaped)';")
+    }
+
     // MARK: - Migration (caller must hold lock)
 
     private func _migrateLocked() throws {

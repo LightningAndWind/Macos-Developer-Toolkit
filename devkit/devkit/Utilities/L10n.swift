@@ -13,6 +13,9 @@
 
 import Foundation
 
-func L(_ key: String) -> String {
+/// nonisolated：工程默认 MainActor 隔离会把全局函数也划入主 actor，
+/// 而错误描述等 nonisolated 上下文（系统 ssh 传输层 / 压缩包服务等）同样要查表。
+/// NSLocalizedString 本身线程安全，跨 actor 调用无副作用。
+nonisolated func L(_ key: String) -> String {
     NSLocalizedString(key, comment: "")
 }

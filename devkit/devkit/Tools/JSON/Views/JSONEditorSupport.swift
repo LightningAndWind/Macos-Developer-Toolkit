@@ -27,6 +27,20 @@ enum JSONEditorPalette {
     static let literal = adaptive(light: rgb(0.55, 0.26, 0.66), dark: rgb(0.80, 0.55, 0.95))
     static let punctuation = adaptive(light: NSColor(white: 0, alpha: 0.55), dark: NSColor(white: 1, alpha: 0.55))
     static let matchBackground = adaptive(light: NSColor(white: 0, alpha: 0.12), dark: NSColor(white: 1, alpha: 0.18))
+    /// 搜索命中底色：暖黄，与括号匹配的灰底拉开层级；明暗两态都保持可读。
+    static let searchBackground = adaptive(
+        light: NSColor(srgbRed: 1.0, green: 0.82, blue: 0.30, alpha: 0.32),
+        dark: NSColor(srgbRed: 1.0, green: 0.72, blue: 0.15, alpha: 0.36)
+    )
+    /// 当前聚焦命中的底色：反差色青底——与普通命中的暖黄近乎互补、与红/蓝语法色对撞，
+    /// 同色系深浅（如橙 vs 黄）不够跳，一眼可辨当前定位到哪一个。
+    static let searchCurrentBackground = adaptive(
+        light: NSColor(srgbRed: 0.00, green: 0.68, blue: 0.85, alpha: 0.95),
+        dark: NSColor(srgbRed: 0.05, green: 0.75, blue: 0.90, alpha: 0.95)
+    )
+    /// 当前聚焦命中的前景：亮青底上用近黑深字（白字在青底上对比不足），
+    /// 也避免原有的红/蓝语法色与青底混在一起发脏。
+    static let searchCurrentForeground = NSColor(srgbRed: 0.0, green: 0.10, blue: 0.15, alpha: 1.0)
 
     private static func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> NSColor {
         NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
@@ -55,6 +69,26 @@ enum JSONSyntaxHighlighter {
         }
     }
 
+    /// 关键字全部命中区间（大小写不敏感子串匹配）；空关键字返回空数组。
+    /// 结果按位置升序且互不重叠，供编辑器敷底色与逐个定位。
+    static func matchRanges(of query: String, in text: String) -> [NSRange] {
+        guard !query.isEmpty else { return [] }
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        var ranges: [NSRange] = []
+        var searchStart = full.location
+        while searchStart <= NSMaxRange(full) {
+            let found = ns.range(of: query,
+                                 options: [.caseInsensitive],
+                                 range: NSRange(location: searchStart,
+                                                length: NSMaxRange(full) - searchStart))
+            guard found.location != NSNotFound else { break }
+            ranges.append(found)
+            searchStart = NSMaxRange(found)
+        }
+        return ranges
+    }
+
     static func highlight(_ storage: NSTextStorage, font: NSFont) {
         let ns = storage.string as NSString
         let full = NSRange(location: 0, length: ns.length)
@@ -68,6 +102,23 @@ enum JSONSyntaxHighlighter {
             }
         }
         storage.endEditing()
+    }
+
+    /// 仅重敷给定区间（按整行扩展）的前景色为语法着色：当前命中的白字覆盖
+    /// 挪走或搜索关闭时用它还原，避免整篇重跑。行为与 highlight 对齐：
+    /// 区间内先铺 plain，再重敷 token 色。
+    static func recolor(_ storage: NSTextStorage, range: NSRange) {
+        let ns = storage.string as NSString
+        guard range.length > 0, range.location < ns.length, let regex = tokenRegex else { return }
+        let clamped = NSRange(location: range.location,
+                              length: min(range.length, ns.length - range.location))
+        let lineRange = ns.lineRange(for: clamped)
+        storage.addAttribute(.foregroundColor, value: JSONEditorPalette.plain, range: lineRange)
+        regex.enumerateMatches(in: storage.string, range: lineRange) { match, _, _ in
+            guard let match, match.range.length > 0 else { return }
+            let color = color(for: ns, match: match)
+            storage.addAttribute(.foregroundColor, value: color, range: match.range)
+        }
     }
 
     private static func color(for ns: NSString, match: NSTextCheckingResult) -> NSColor {

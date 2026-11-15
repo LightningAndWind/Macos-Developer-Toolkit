@@ -57,7 +57,7 @@ enum JSONParser {
         } catch let error as JSONError {
             return .failure(error)
         } catch {
-            return .failure(JSONError(message: "解析失败", hint: nil, offset: chars.count, source: chars))
+            return .failure(JSONError(message: L("解析失败"), hint: nil, offset: chars.count, source: chars))
         }
     }
 }
@@ -287,7 +287,9 @@ private struct JSONValueScanner {
         while let c = peek, c == " " || c == "\t" || c == "\n" || c == "\r" { consume() }
     }
 
+    /// 统一出口处本地化：message/hint 均为中文 key；
+    /// 已经由 String(format: L(...)) 拼好的文本再过 L() 查不到即原样透传，无副作用。
     private func error(_ message: String, hint: String? = nil) -> JSONError {
-        JSONError(message: message, hint: hint, offset: index, source: chars)
+        JSONError(message: L(message), hint: hint.map(L), offset: index, source: chars)
     }
 }

@@ -2,7 +2,8 @@
 //  AppPreferences.swift
 //  devkit
 //
-//  应用偏好：数据存储目录（沙盒 security-scoped bookmark）+ 首次启动标记 + 侧栏宽度等 UI 偏好键。
+//  应用偏好：数据存储目录（默认落在 ~/Library/Application Support/devkit/data，
+//  可在设置中迁移到别的目录）+ 侧栏宽度等 UI 偏好键。
 //
 
 import Foundation
@@ -33,6 +34,17 @@ final class AppPreferences {
         static let dataPath     = "devkit.dataDir.path"
     }
 
+    /// 未另选数据目录时的默认位置：`~/Library/Application Support/devkit/data`。
+    /// 首次启动直接使用默认目录（不再强制选择）；之后可在设置中迁移到新目录（如同步盘）。
+    static let defaultDataDirectoryURL: URL = {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                               in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return support.appendingPathComponent("devkit", isDirectory: true)
+            .appendingPathComponent("data", isDirectory: true)
+    }()
+
     private let defaults: UserDefaults
     /// 当前正在访问的安全作用域 URL（需要成对调用 stop）。
     private var accessingURL: URL?
@@ -45,13 +57,15 @@ final class AppPreferences {
         self.defaults = defaults
     }
 
-    /// 是否已完成首次启动引导。
-    var hasCompletedDataDirSetup: Bool {
-        dataDirectoryURL != nil
+    /// 是否仍在使用默认数据目录（从未迁移过）。
+    var isUsingDefaultDataDirectory: Bool {
+        dataDirectoryURL == nil
     }
 
-    /// 数据目录。临时目录（自检模式）优先；其次以记录的绝对路径为准（关闭沙盒后可直接访问任意路径）；
-    /// 若路径缺失则回退解析历史书签（旧沙盒构建存的是 security-scope 书签）。
+    /// 数据目录（用户显式选择过的）。临时目录（自检模式）优先；其次以记录的绝对路径为准
+    /// （关闭沙盒后可直接访问任意路径）；若路径缺失则回退解析历史书签（旧沙盒构建存的
+    /// security-scope 书签）。**不含默认目录回退**——那是 `resolvedDataDirectoryURL()` 的职责，
+    /// 二者分开才能区分「默认 / 已迁移」展示与旧书签解析。
     var dataDirectoryURL: URL? {
         if let ephemeralDataDirectoryURL { return ephemeralDataDirectoryURL }
         if let path = defaults.string(forKey: Keys.dataPath), !path.isEmpty {
@@ -65,9 +79,17 @@ final class AppPreferences {
                         bookmarkDataIsStale: &stale)
     }
 
+    /// 实际生效的数据目录：临时 / 自选目录，否则回落默认目录（不存在则创建）。
+    func resolvedDataDirectoryURL() throws -> URL {
+        if let url = dataDirectoryURL { return url }
+        try FileManager.default.createDirectory(at: Self.defaultDataDirectoryURL,
+                                                withIntermediateDirectories: true)
+        return Self.defaultDataDirectoryURL
+    }
+
     /// 数据库文件完整路径（`<dir>/devkit.sqlite3`）。
     var databaseFileURL: URL? {
-        dataDirectoryURL?.appendingPathComponent("devkit.sqlite3")
+        (try? resolvedDataDirectoryURL())?.appendingPathComponent("devkit.sqlite3")
     }
 
     /// 选择并记录数据目录。校验目录可写；关闭沙盒后无需 security-scope，直接记录路径。

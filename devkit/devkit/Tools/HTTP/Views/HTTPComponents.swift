@@ -5,6 +5,7 @@
 //  M2：HTTP 工具复用的展示组件与格式化工具。
 //
 
+import AppKit
 import SwiftUI
 
 /// 展示层格式化与配色。
@@ -117,11 +118,12 @@ struct HTTPKVEditor: View {
                                 .toggleStyle(.checkbox)
                                 .frame(width: 18)
                         }
-                        TextField(keyPlaceholder, text: $item.key)
+                        // 占位符经 String 参数传入，TextField 走 StringProtocol 通道不查表，需 L()。
+                        TextField(L(keyPlaceholder), text: $item.key)
                             .textFieldStyle(.roundedBorder)
                             .font(.body.monospaced())
                             .frame(width: 150)
-                        TextField(valuePlaceholder, text: $item.value)
+                        TextField(L(valuePlaceholder), text: $item.value)
                             .textFieldStyle(.roundedBorder)
                             .font(.body.monospaced())
                             .frame(maxWidth: .infinity)
@@ -149,6 +151,120 @@ struct HTTPKVEditor: View {
             .controlSize(.small)
         }
         .padding(12)
+    }
+}
+
+/// multipart 文件条目编辑器：每行 [启用开关] [字段名] [选择文件] [MIME] [删除]，
+/// 选中文件后附一行「上传文件名 + 完整路径」。与 `HTTPKVEditor` 同风格。
+///
+/// MIME / 上传文件名**留空即自动**：MIME 按扩展名推断（占位文本实时显示推导值），
+/// 文件名取路径末段。显式填了则视为有意覆盖，重新选文件不会改写它们。
+struct MultipartFileEditor: View {
+    @Binding var files: [HTTPMultipartFile]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if files.isEmpty {
+                Text("暂无文件")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach($files) { $file in
+                    fileRow($file)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    files.append(HTTPMultipartFile())
+                } label: {
+                    Label("添加文件", systemImage: "plus")
+                }
+                Spacer()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+    }
+
+    private func fileRow(_ file: Binding<HTTPMultipartFile>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Toggle("", isOn: file.enabled)
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .frame(width: 18)
+                TextField("字段名", text: file.fieldName)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+                    .frame(width: 110)
+                Button {
+                    pickFile(into: file)
+                } label: {
+                    Label(
+                        // 三目结果是 String 变量通道，占位文案要显式 L()；文件名本身不翻。
+                        file.wrappedValue.effectiveFileName.isEmpty ? L("选择文件") : file.wrappedValue.effectiveFileName,
+                        systemImage: file.wrappedValue.filePath.isEmpty ? "folder" : "doc"
+                    )
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    // 固定中等宽度：撑满整行在宽窗口下过于巨大，且选中文件后行内控件会错位。
+                    .frame(width: 220)
+                }
+                .buttonStyle(.bordered)
+                // 悬停可见完整路径：行内只显示文件名，重放历史时要能核对选的是哪个文件。
+                .help(file.wrappedValue.filePath)
+                TextField("MIME", text: file.mimeType, prompt: Text(file.wrappedValue.effectiveMimeType))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.body.monospaced())
+                    .frame(width: 150)
+                Button {
+                    files.removeAll { $0.id == file.wrappedValue.id }
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
+
+            if !file.wrappedValue.filePath.isEmpty {
+                HStack(spacing: 8) {
+                    Text("上传名")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("上传文件名", text: file.fileName,
+                              prompt: Text((file.wrappedValue.filePath as NSString).lastPathComponent))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.body.monospaced())
+                        .frame(width: 180)
+                    Text(file.wrappedValue.filePath)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    /// 选文件；面板用法与 `SSHProfileEditorView.pickKey` 一致（`runModal`）。
+    private func pickFile(into file: Binding<HTTPMultipartFile>) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.prompt = L("选择文件")
+        // 二次选择时默认停在上次目录
+        if !file.wrappedValue.filePath.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: (file.wrappedValue.filePath as NSString).deletingLastPathComponent,
+                                     isDirectory: true)
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        file.wrappedValue.filePath = url.path
     }
 }
 

@@ -24,7 +24,9 @@ struct RequestEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("分区", selection: $section) {
-                ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
+                // rawValue 是 String 变量，Text 走 StringProtocol 初始化器、不查本地化表；
+                // 必须显式 L()，否则「历史」这类中文 case 在英文界面下漏翻。
+                ForEach(Section.allCases) { Text(L($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -83,7 +85,7 @@ struct RequestEditorView: View {
     private var bodyPane: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("类型", selection: $tool.request.body.kind) {
-                ForEach(HTTPBodyModel.Kind.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(HTTPBodyModel.Kind.allCases) { Text(L($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -95,6 +97,17 @@ struct RequestEditorView: View {
             case .form:
                 HTTPKVEditor(items: $tool.request.body.formFields,
                              keyPlaceholder: "字段", valuePlaceholder: "值")
+            case .multipart:
+                // 文本字段与文件条目混排是 multipart 的常态（如 `caption` + `file`），
+                // 分两个分区编辑；文件以路径引用，发送时才读取内容。
+                // HTTPSection.title 是纯 String 通道，不会自动查表，须显式 L()。
+                HTTPSection(title: L("文本字段")) {
+                    HTTPKVEditor(items: $tool.request.body.multipartFields,
+                                 keyPlaceholder: "字段", valuePlaceholder: "值")
+                }
+                HTTPSection(title: L("文件")) {
+                    MultipartFileEditor(files: $tool.request.body.multipartFiles)
+                }
             case .json, .raw:
                 if tool.request.body.kind == .json {
                     Button {
@@ -128,7 +141,7 @@ struct RequestEditorView: View {
     private var authPane: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("方式", selection: $tool.request.auth.kind) {
-                ForEach(HTTPAuthModel.Kind.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(HTTPAuthModel.Kind.allCases) { Text(L($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()

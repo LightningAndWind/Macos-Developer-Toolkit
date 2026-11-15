@@ -5,7 +5,8 @@
 //  终端记事本右侧面板：记事按 SSH 会话记录分类的片段库（SQLite 持久化）。
 //  顶部分类切换器默认选中**当前会话的记录**，可切到其他记录（含未分类）查看其记事 ——
 //  执行不受分类限制，任何记事都发往**当前**终端（跨记录复用片段正是分类浏览的意义）。
-//  支持：新建（落入选中分类）/ 行尾「…」菜单重命名 / 删除（二次确认）。
+//  支持：新建（弹窗填名称与内容，「保存」才落库、「取消」不留空记录）/ 行尾「…」菜单重命名 /
+//  删除（二次确认）。
 //  手风琴式展开：同一时刻只展开一条，展开态**只读** —— 内容纯展示（可选中复制），
 //  编辑走内容区下方的「编辑」按钮弹窗（保存 / 取消），不再行内直编。
 //  行交互：单击行任意处（含箭头/标题区）立即展开收起；重命名 / 删除收进运行按钮旁的「…」菜单。
@@ -40,6 +41,8 @@ struct TerminalNotePadPanel: View, Equatable {
     @State private var expandedID: UUID?
     /// 弹窗编辑中的记事快照（item 驱动 sheet：收起动画期间内容不闪空）。
     @State private var editingNote: EditingNote?
+    /// 新建弹窗是否展示：点「+」先弹窗填名称与内容，「保存」才落库（取消不产生空记录）。
+    @State private var isCreatingNote = false
     /// 待删除确认的记事（confirmationDialog 以此驱动）。
     @State private var pendingDeleteID: UUID?
     /// 底部提示条文案（执行成功 / 失败），几秒后自动消失。
@@ -92,6 +95,11 @@ struct TerminalNotePadPanel: View, Equatable {
         .sheet(item: $editingNote) { editing in
             NoteContentEditSheet(noteTitle: editing.title, initialContent: editing.content) { draft in
                 store.updateContent(id: editing.id, content: draft)
+            }
+        }
+        .sheet(isPresented: $isCreatingNote) {
+            NoteCreateSheet { title, content in
+                createNote(title: title, content: content)
             }
         }
         return panel
@@ -177,15 +185,24 @@ struct TerminalNotePadPanel: View, Equatable {
 
     // MARK: 动作
 
+    /// 点「+」：不再直接落库，先弹新建弹窗（db 未打开时提前提示，避免弹一个保存不了的窗）。
     private func createNote() {
-        // 新增默认落入**当前选中的分类**（初始为当前会话的记录）。
-        guard let note = store.create(profileID: selectedProfileID) else {
+        guard DatabaseManager.shared.isOpen else {
             showMessage(Flash(text: "数据库未打开，无法新建", isError: true))
             return
         }
-        // 展开新记事并直接进入编辑弹窗：展开态只读，没有弹窗就没法填内容。
+        isCreatingNote = true
+    }
+
+    /// 新建弹窗「保存」后的落库路径：新记事落入**当前选中的分类**（初始为当前会话的记录）。
+    /// 取消弹窗不会走到这里 —— 不产生空记录。
+    private func createNote(title: String, content: String) {
+        guard let note = store.create(profileID: selectedProfileID, title: title, content: content) else {
+            showMessage(Flash(text: "数据库未打开，无法新建", isError: true))
+            return
+        }
+        // 名称与内容已在弹窗填好，展开新记事便于直接查看 / 执行。
         expandedID = note.id
-        presentEdit(note)
     }
 
     private func toggleExpand(_ note: TerminalNote) {
@@ -247,6 +264,91 @@ private struct EditingNote: Identifiable {
     let id: UUID
     let title: String
     let content: String
+}
+
+// MARK: - 新建弹窗
+
+/// 新建记事弹窗：点「+」先在这里填名称与内容，「保存」才落库、「取消」不产生任何记录。
+/// 草稿存本地 @State：取消即丢弃；名称与内容全空时禁用保存，杜绝存出空白记录
+/// （空白标题本身合法 —— 行展示会回落为「未命名记事」，与重命名行为一致）。
+private struct NoteCreateSheet: View {
+    /// 保存回调：参数为弹窗内的名称与内容草稿（落库与收尾由面板完成）。
+    let onSave: (_ title: String, _ content: String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var titleDraft = ""
+    @State private var contentDraft = ""
+    @FocusState private var titleFieldFocused: Bool
+
+    private var isBlankDraft: Bool {
+        titleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && contentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("新建记事")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("名称")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("记事名称", text: $titleDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .focused($titleFieldFocused)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("内容")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $contentDraft)
+                    .font(.system(size: 12, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .scrollIndicators(.never)
+                    .background(TextEditorScrollerHider())
+                    .padding(6)
+                    .frame(height: 200)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.05))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08))
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if contentDraft.isEmpty {
+                            Text("输入要执行的命令…")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                                // 与编辑器首行文字 / 插入点对齐（同内容编辑弹窗）。
+                                .padding(.top, 6)
+                                .padding(.leading, 11)
+                                .allowsHitTesting(false)
+                        }
+                    }
+            }
+
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("保存") {
+                    onSave(titleDraft, contentDraft)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(isBlankDraft)
+            }
+        }
+        .padding(18)
+        .frame(width: 460)
+        // 弹窗出现即落焦名称输入框，等一拍确保已挂到窗口。
+        .onAppear { DispatchQueue.main.async { titleFieldFocused = true } }
+    }
 }
 
 // MARK: - 内容编辑弹窗

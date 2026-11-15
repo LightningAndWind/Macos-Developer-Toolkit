@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 /// HTTP 发送器。允许所有 HTTP 状态码（4xx/5xx 不抛错），仅传输层失败抛错。
 struct HTTPClient {
@@ -201,7 +202,15 @@ struct HTTPClient {
         }
 
         // Body
-        if !request.body.isEmpty, let payload = request.body.encodedPayload,
+        //
+        // multipart 单独走二进制通道：boundary 在这里生成，Content-Type 必须带**同一个** boundary，
+        // 服务端才能按正确边界切分包 —— 所以即使用户在 Headers 里手填了 Content-Type，也要在这里覆盖，
+        // 否则头里的 boundary 与实际请求体的边界错位，请求必坏且现象只在服务端（400 / 空 parts）。
+        if request.body.kind == .multipart, !request.body.isEmpty {
+            let boundary = "devkit-" + UUID().uuidString
+            req.httpBody = try Self.multipartBody(for: request.body, boundary: boundary)
+            req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        } else if !request.body.isEmpty, let payload = request.body.encodedPayload,
            let bodyData = payload.data(using: .utf8) {
             if let contentType = request.body.contentType {
                 req.setValue(contentType, forHTTPHeaderField: "Content-Type")
@@ -211,12 +220,77 @@ struct HTTPClient {
 
         return req
     }
+
+    // MARK: - multipart 构造
+
+    /// 组装 multipart/form-data 请求体。
+    ///
+    /// **在内存中组装**（文件内容整个读入再拼接）：对调试工具可接受 —— 上传文件通常是
+    /// 小体积（图片 / 配置 / 日志）。若将来要支持几百 MB 级上传，应改走
+    /// `URLSession.uploadTask(with:fromFile:)` + 临时文件，而不是把路径拼接改成流式。
+    ///
+    /// 部件格式（RFC 7578，curl `-F` / Postman 同款）：
+    /// ```
+    /// --BOUNDARY\r\n
+    /// Content-Disposition: form-data; name="field"[; filename="a.png"]\r\n
+    /// [Content-Type: image/png]\r\n        ← 仅文件部件
+    /// \r\n
+    /// 内容\r\n
+    /// --BOUNDARY--\r\n                     ← 结束边界，最后一个部件之后
+    /// ```
+    private static func multipartBody(for body: HTTPBodyModel, boundary: String) throws -> Data {
+        var data = Data()
+
+        func append(_ string: String) {
+            data.append(Data(string.utf8))
+        }
+
+        for field in body.multipartFields where field.enabled && !field.key.isEmpty {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(escapeMultipartToken(field.key))\"\r\n\r\n")
+            append(field.value)
+            append("\r\n")
+        }
+
+        for file in body.multipartFiles where file.isActive {
+            let fileData: Data
+            do {
+                fileData = try Data(contentsOf: URL(fileURLWithPath: file.filePath), options: .mappedIfSafe)
+            } catch {
+                // 文件在保存后被移动/删除是正常运维场景（历史重放尤其常见），必须给出可定位的报错，
+                // 而不是让 Data 的底层错误（一堆 errno）直接漏给用户。
+                throw HTTPClientError.multipartFileUnreadable(fieldName: file.fieldName, path: file.filePath)
+            }
+            // filePath 以分隔符结尾等极端情况下末段可能为空，仍要给服务端一个合法 filename。
+            let fileName = file.effectiveFileName.isEmpty ? "file" : file.effectiveFileName
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(escapeMultipartToken(file.fieldName))\"; filename=\"\(escapeMultipartToken(fileName))\"\r\n")
+            append("Content-Type: \(file.effectiveMimeType)\r\n\r\n")
+            data.append(fileData)
+            append("\r\n")
+        }
+
+        append("--\(boundary)--\r\n")
+        return data
+    }
+
+    /// multipart 的 name / filename 中出现 `"` 会提前终结带引号的语法段；用 `%22` 替换
+    /// （Postman 同款处理），同时顺手转义换行 —— 它们在头部区是非法字符。
+    private static func escapeMultipartToken(_ token: String) -> String {
+        token
+            .replacingOccurrences(of: "\"", with: "%22")
+            .replacingOccurrences(of: "\r", with: "%0D")
+            .replacingOccurrences(of: "\n", with: "%0A")
+    }
 }
 
 enum HTTPClientError: LocalizedError {
     case invalidURL(String)
     case notHTTPResponse
     case transport(String)
+    /// multipart 的某个文件条目读不出来（已被移动/删除/无权限）。
+    /// 与传输失败区分开：这是本地文件问题，报错里带字段名和路径才好定位。
+    case multipartFileUnreadable(fieldName: String, path: String)
     /// 用户在界面上主动「停止」。与传输失败区分开，好让调用方走中性提示而不是红色报错。
     case cancelled
 
@@ -228,6 +302,8 @@ enum HTTPClientError: LocalizedError {
             return "响应不是有效的 HTTP 响应"
         case .transport(let message):
             return String(format: L("网络请求失败：%@"), String(message))
+        case .multipartFileUnreadable(let fieldName, let path):
+            return String(format: L("上传文件不可读（字段 %@）：%@。文件可能已被移动或删除，请重新选择。"), fieldName, path)
         case .cancelled:
             return "请求已取消"
         }

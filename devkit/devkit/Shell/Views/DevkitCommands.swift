@@ -108,12 +108,6 @@ struct DevkitCommands: Commands {
                 appState.isSettingsPresented = true
             }
             .keyboardShortcut(",", modifiers: .command)
-
-            Divider()
-
-            Button("重置数据目录…") {
-                appState.resetDataDirectory()
-            }
         }
     }
 }

@@ -57,10 +57,10 @@ struct SSHConnectBanner: View {
     private var title: String {
         switch state {
         case .connected(let host): return host
-        case .connecting: return "连接中…"
-        case .failed: return "连接失败"
-        case .disconnected: return "已断开"
-        case .idle: return tool.activeProfile?.host ?? "未连接"
+        case .connecting: return L("连接中…")
+        case .failed: return L("连接失败")
+        case .disconnected: return L("已断开")
+        case .idle: return tool.activeProfile?.host ?? L("未连接")
         }
     }
 
@@ -117,10 +117,10 @@ struct SSHEmptyPrompt: View {
             Text("开始一个终端会话").font(.title3.weight(.semibold))
 
             VStack(spacing: 10) {
-                actionCard(icon: "house", title: "本地终端", subtitle: "打开本机 shell（默认进入个人目录）") {
+                actionCard(icon: "house", title: L("本地终端"), subtitle: L("打开本机 shell（默认进入个人目录）")) {
                     tool.startLocal()
                 }
-                actionCard(icon: "network", title: "打开 / 新建记录", subtitle: "本地目录或 SSH 主机，从弹窗选择") {
+                actionCard(icon: "network", title: L("打开 / 新建记录"), subtitle: L("本地目录或 SSH 主机，从弹窗选择")) {
                     openChooser()
                 }
             }

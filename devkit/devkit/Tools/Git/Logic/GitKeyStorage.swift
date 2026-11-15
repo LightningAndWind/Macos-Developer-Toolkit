@@ -22,7 +22,7 @@ enum GitKeyStorage {
 
     /// git_keys/ 目录 URL；确保存在。数据目录未配置时返回 nil。
     static func keysDirectoryURL(create: Bool = true) -> URL? {
-        guard let base = AppPreferences.shared.dataDirectoryURL else { return nil }
+        guard let base = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return nil }
         let dir = base.appendingPathComponent(subdirectory, isDirectory: true)
         if create, !FileManager.default.fileExists(atPath: dir.path) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

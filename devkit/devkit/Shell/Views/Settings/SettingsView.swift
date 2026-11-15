@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  devkit
 //
-//  设置面板：集中管理 HTTP 记录与终端会话记录（新增 / 删除），另含数据目录信息。
+//  设置面板：集中管理 HTTP 记录与终端会话记录（新增 / 删除），另含数据目录管理
+//  （迁移到新目录 / 恢复默认 / 配置压缩包导出导入）。
 //  入口：侧栏左下角设置按钮、菜单「设置…」(⌘,)。
 //
 //  设计说明：
@@ -112,7 +113,17 @@ struct SettingsView: View {
     // 删除确认
     @State private var pendingDeletion: PendingDeletion?
     @State private var isConfirmingHistoryClear = false
-    @State private var isConfirmingDataDirReset = false
+
+    // 数据目录迁移 / 配置导入导出
+    /// 待确认迁移的目标目录（弹确认框）。
+    @State private var pendingMigrateDir: URL?
+    @State private var isConfirmingRestoreDefault = false
+    /// 待确认导入的压缩包与其清单（弹确认框；两者成对置空）。
+    @State private var pendingImportZip: URL?
+    @State private var pendingImportManifest: ConfigArchive.Manifest?
+    @State private var archiveBusy = false
+    @State private var archiveStatus: String?
+    @State private var archiveError: String?
 
     // AI 接入分区（端口草稿，提交时应用）
     @State private var aiPortDraft: String = ""
@@ -161,17 +172,52 @@ struct SettingsView: View {
             Text(String(format: L("将删除 %@ 条历史记录，此操作不可撤销。"), String(historyTotal)))
         }
         .confirmationDialog(
-            "重置数据目录？",
-            isPresented: $isConfirmingDataDirReset,
+            pendingMigrateDir != nil ? "迁移数据目录？" : "",
+            isPresented: Binding(
+                get: { pendingMigrateDir != nil },
+                set: { if !$0 { pendingMigrateDir = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingMigrateDir
+        ) { dir in
+            Button("迁移并重启", role: .destructive) { performMigrate(to: dir) }
+            Button("取消", role: .cancel) { pendingMigrateDir = nil }
+        } message: { dir in
+            Text(String(format: L("将把数据库与密钥复制到「%@」并切换过去，应用随后自动重启。当前目录里的文件会原样保留。"), String(dir.path)))
+        }
+        .confirmationDialog(
+            "恢复默认数据目录？",
+            isPresented: $isConfirmingRestoreDefault,
             titleVisibility: .visible
         ) {
-            Button("重置", role: .destructive) {
-                dismiss()
-                appState.resetDataDirectory()
-            }
+            Button("恢复默认并重启", role: .destructive) { performRestoreDefault() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将断开当前数据库并回到首次启动引导，重新选择目录。磁盘上已有的数据文件不会被删除。")
+            Text(String(format: L("将把数据库与密钥复制回默认目录（%@）并切换过去，应用随后自动重启。当前目录里的文件会原样保留。"), String(AppPreferences.defaultDataDirectoryURL.path)))
+        }
+        .confirmationDialog(
+            pendingImportZip != nil ? "导入配置压缩包？" : "",
+            isPresented: Binding(
+                get: { pendingImportZip != nil },
+                set: {
+                    if !$0 {
+                        pendingImportZip = nil
+                        pendingImportManifest = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingImportManifest
+        ) { manifest in
+            Button("导入并覆盖", role: .destructive) { performImport() }
+            Button("取消", role: .cancel) {
+                pendingImportZip = nil
+                pendingImportManifest = nil
+            }
+        } message: { manifest in
+            Text(String(format: L("压缩包由 devkit %@ 于 %@ 导出。导入将覆盖当前全部记录（含密码与私钥），此操作不可撤销；应用随后自动重启。"),
+                        String(manifest.appVersion.isEmpty ? "?" : manifest.appVersion),
+                        Self.archiveDateFormatter.string(from: manifest.createdAt)))
         }
     }
 
@@ -478,20 +524,53 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("数据目录").font(.system(size: 12, weight: .semibold))
-                Text(AppPreferences.shared.dataDirectoryURL?.path ?? L("未设置"))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) {
+                    Text(currentDataDirectoryText)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(isUsingDefaultDataDir ? "默认" : "自定义")
+                        .font(.system(size: 10, weight: .medium))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+                        .foregroundStyle(Color.accentColor)
+                }
                 HStack(spacing: 8) {
                     Button("在访达中显示") { revealDataDirectory() }
-                    Button("重置数据目录…", role: .destructive) { isConfirmingDataDirReset = true }
+                    Button("迁移到新目录…") { chooseMigrateDirectory() }
+                    if !isUsingDefaultDataDir {
+                        Button("恢复默认目录…") { isConfirmingRestoreDefault = true }
+                    }
                 }
                 .controlSize(.small)
+                HStack(spacing: 8) {
+                    Button("导出配置压缩包…") { exportArchive() }
+                    Button("导入配置压缩包…") { chooseImportArchive() }
+                }
+                .controlSize(.small)
+                if archiveBusy {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text("正在处理…").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let archiveStatus {
+                    Label(archiveStatus, systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                if let archiveError {
+                    Label(archiveError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            Text("HTTP 记录（已保存请求 / 历史）与终端会话记录均保存在该目录下的 devkit.sqlite3。")
+            Text("所有记录（含密码与私钥）均保存在该目录下的 devkit.sqlite3 与 ssh_keys/、git_keys/ 内；导出的配置压缩包同样包含凭据，请妥善保管。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -850,8 +929,164 @@ struct SettingsView: View {
     }
 
     private func revealDataDirectory() {
-        guard let url = AppPreferences.shared.dataDirectoryURL else { return }
+        guard let url = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    // MARK: - 数据目录迁移 / 配置导入导出
+
+    /// 是否仍在使用默认数据目录（迁移 / 恢复默认后随 relaunch 重启，会话内不会变化）。
+    private var isUsingDefaultDataDir: Bool {
+        AppPreferences.shared.isUsingDefaultDataDirectory
+    }
+
+    /// 当前生效的数据目录路径（默认目录兜底，正常启动后必有值）。
+    private var currentDataDirectoryText: String {
+        AppPreferences.shared.dataDirectoryURL?.path ?? AppPreferences.defaultDataDirectoryURL.path
+    }
+
+    /// 导入确认框里展示的压缩包导出时间。
+    private static let archiveDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// 压缩包文件名里的时间戳（yyyyMMdd-HHmm）。
+    private static let archiveNameFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmm"
+        return formatter
+    }()
+
+    private func chooseMigrateDirectory() {
+        guard let dir = PanelHelpers.chooseDirectory(title: "选择新的 devkit 数据目录") else { return }
+        pendingMigrateDir = dir
+    }
+
+    /// 迁移：把库与密钥复制到新目录 → 指向新目录 → 重启。
+    private func performMigrate(to newDir: URL) {
+        pendingMigrateDir = nil
+        guard let currentDir = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return }
+        archiveBusy = true
+        archiveError = nil
+        archiveStatus = nil
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try ConfigArchive.migrate(from: currentDir, to: newDir)
+                }.value
+                try AppPreferences.shared.setDataDirectory(newDir)
+                archiveBusy = false
+                relaunch()
+            } catch {
+                archiveBusy = false
+                archiveError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 恢复默认目录：默认位置若残留早期数据（迁移走之前留下的）先清掉，以当前数据为准。
+    private func performRestoreDefault() {
+        guard !AppPreferences.shared.isUsingDefaultDataDirectory else { return }
+        guard let currentDir = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return }
+        let defaultDir = AppPreferences.defaultDataDirectoryURL
+        archiveBusy = true
+        archiveError = nil
+        archiveStatus = nil
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try? FileManager.default.removeItem(
+                        at: defaultDir.appendingPathComponent(ConfigArchive.databaseFileName))
+                    for name in ConfigArchive.keyDirectoryNames {
+                        try? FileManager.default.removeItem(
+                            at: defaultDir.appendingPathComponent(name, isDirectory: true))
+                    }
+                    try ConfigArchive.migrate(from: currentDir, to: defaultDir)
+                }.value
+                AppPreferences.shared.clearDataDirectory()
+                archiveBusy = false
+                relaunch()
+            } catch {
+                archiveBusy = false
+                archiveError = error.localizedDescription
+            }
+        }
+    }
+
+    private func exportArchive() {
+        let name = "devkit-config-\(Self.archiveNameFormatter.string(from: .now)).zip"
+        guard let dest = PanelHelpers.chooseSaveLocation(defaultFileName: name, title: "导出配置压缩包") else { return }
+        // 覆盖已有文件已由保存面板确认过；ConfigArchive 要求目标不存在，这里先清掉。
+        try? FileManager.default.removeItem(at: dest)
+        guard let dataDir = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return }
+        archiveBusy = true
+        archiveError = nil
+        archiveStatus = nil
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try ConfigArchive.export(to: dest, dataDirectory: dataDir)
+                }.value
+                archiveBusy = false
+                archiveStatus = String(format: L("已导出：%@"), String(dest.lastPathComponent))
+            } catch {
+                archiveBusy = false
+                archiveError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 选择压缩包 → 后台校验 → 弹确认框（带导出版本 / 时间信息）。
+    private func chooseImportArchive() {
+        guard let zip = PanelHelpers.chooseZipFile(title: "选择要导入的配置压缩包") else { return }
+        archiveBusy = true
+        archiveError = nil
+        archiveStatus = nil
+        Task {
+            do {
+                let manifest = try await Task.detached(priority: .userInitiated) {
+                    try ConfigArchive.inspect(zip: zip)
+                }.value
+                archiveBusy = false
+                pendingImportZip = zip
+                pendingImportManifest = manifest
+            } catch {
+                archiveBusy = false
+                archiveError = error.localizedDescription
+            }
+        }
+    }
+
+    /// 确认后的导入：停 AI 服务 / 关库 → 替换文件 → 重启。失败则重开原库继续可用。
+    private func performImport() {
+        guard let zip = pendingImportZip else { return }
+        pendingImportZip = nil
+        pendingImportManifest = nil
+        guard let dataDir = try? AppPreferences.shared.resolvedDataDirectoryURL() else { return }
+
+        // 替换的是数据库本体，先停服务再关库；relaunch 里的 saveSession 对已关库静默失败，无害。
+        AIAccessServer.shared.shutdown()
+        DatabaseManager.shared.close()
+        archiveBusy = true
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try ConfigArchive.restore(zip: zip, into: dataDir)
+                }.value
+                archiveBusy = false
+                relaunch()
+            } catch {
+                archiveBusy = false
+                archiveError = error.localizedDescription
+                // 没换成：重新打开原库（文件未被替换，restore 失败时已回滚），应用继续可用。
+                try? DatabaseManager.shared.open(
+                    at: dataDir.appendingPathComponent(ConfigArchive.databaseFileName))
+                SSHProfileStore.invalidateProfileSummaries()
+            }
+        }
     }
 
     /// 语言切换后的重启：顺序必须是「旧实例先退干净 → 再拉新实例」。
@@ -1015,8 +1250,9 @@ private let aiServer = AIAccessServer.shared
 extension SettingsView {
     /// 给 AI 客户端用的提示词：教模型如何使用 devkit 的 MCP 工具。
     /// 可整体复制到 AGENTS.md / 系统提示词，配合工具描述一起生效。
+    /// 整段作为单条 key 走 L() 查表，随应用语言（系统语言 / App 单独语言设置）切换中英文。
     private var aiUsagePrompt: String {
-        """
+        L("""
         你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，
         任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；
         工具输出中的 [REDACTED] 是脱敏占位符。
@@ -1047,7 +1283,7 @@ extension SettingsView {
         - exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。
         - timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。
         - 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。
-        """
+        """)
     }
 
     private var aiPane: some View {

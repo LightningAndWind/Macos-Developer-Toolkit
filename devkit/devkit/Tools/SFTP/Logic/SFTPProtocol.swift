@@ -224,15 +224,15 @@ enum SFTPError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPacket:
-            return "收到无法解析的 SFTP 数据包"
+            return L("收到无法解析的 SFTP 数据包")
         case .connectionClosed:
-            return "SFTP 连接已断开"
+            return L("SFTP 连接已断开")
         case .serverError(_, let message):
-            return message.isEmpty ? "SFTP 操作失败" : message
+            return message.isEmpty ? L("SFTP 操作失败") : message
         case .unsupportedReply(let type):
             return String(format: L("收到不支持的数据包类型 %@"), String(type))
         case .timedOut:
-            return "SFTP 请求超时"
+            return L("SFTP 请求超时")
         }
     }
 

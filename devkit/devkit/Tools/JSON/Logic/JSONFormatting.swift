@@ -24,8 +24,8 @@ enum JSONIndent: String, CaseIterable, Codable {
 
     var label: String {
         switch self {
-        case .spaces2: return "2 空格"
-        case .spaces4: return "4 空格"
+        case .spaces2: return L("2 空格")
+        case .spaces4: return L("4 空格")
         case .tab:     return "Tab"
         }
     }

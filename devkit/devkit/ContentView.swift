@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  devkit
 //
-//  根视图：按 AppState.phase 路由到引导页 / 主壳 / 错误页。
+//  根视图：按 AppState.phase 路由到启动页 / 主壳 / 错误页。
 //
 
 import SwiftUI
@@ -18,8 +18,6 @@ struct ContentView: View {
             switch appState.phase {
             case .booting:
                 BootingView()
-            case .needsOnboarding:
-                OnboardingView()
             case .ready:
                 AppShellView()
             case .failed(let message):
@@ -39,7 +37,6 @@ struct ContentView: View {
     private var phaseKey: String {
         switch appState.phase {
         case .booting: return "booting"
-        case .needsOnboarding: return "onboarding"
         case .ready: return "ready"
         case .failed: return "failed"
         }
@@ -73,17 +70,33 @@ private struct BootFailedView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
-                HStack(spacing: 12) {
-                    Button("重试") {
-                        Task { await appState.bootstrap() }
-                    }
-                    Button("重新选择数据目录…", role: .destructive) {
-                        appState.resetDataDirectory()
-                    }
+                Button("重试") {
+                    Task { await appState.bootstrap() }
                 }
             }
             .padding(40)
         }
+    }
+}
+
+/// 使用 NSVisualEffectView 提供原生毛玻璃背景。
+/// （原在 OnboardingView.swift；引导页移除后收编到这里，AppShellView 仍在使用。）
+struct VisualEffectBackground: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .hudWindow
+    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = material
+        v.blendingMode = blendingMode
+        v.state = .followsWindowActiveState
+        return v
+    }
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        // 只在真的变化时写：宿主视图任何一次重算都会走到这里，无条件赋值会让
+        // NSVisualEffectView 反复失效重绘（侧栏拖拽时尤其明显）。
+        if nsView.material != material { nsView.material = material }
+        if nsView.blendingMode != blendingMode { nsView.blendingMode = blendingMode }
     }
 }
 

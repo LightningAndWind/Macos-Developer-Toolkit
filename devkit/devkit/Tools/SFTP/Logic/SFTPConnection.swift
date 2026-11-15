@@ -39,9 +39,13 @@ final class SFTPConnection: SFTPBackend {
     // MARK: - 连接
 
     /// 连接并完成 SFTP 握手；失败时置 `.failed`，不抛出。
+    /// 配置了跳板机时两台主机都要可用：私钥引擎经 ProxyCommand 转发（跳板须私钥认证），
+    /// 密码引擎经 NIOSSH 隧道（跳板 + 目标都需已通过 SSH 终端的 TOFU 信任）。
     func connect(profile: SSHProfile) async {
         guard !isConnectingOrConnected else { return }
         state = .connecting
+
+        let jumpProfile = SSHJumpSupport.resolveJump(for: profile)
 
         // 私钥认证走系统 ssh（自带主机校验），只需拿到私钥文件路径；
         // 密码认证走 NIOSSH，沿用应用内 TOFU：未信任主机给出明确指引。
@@ -55,15 +59,34 @@ final class SFTPConnection: SFTPBackend {
             }
             let knownHosts = (SSHKeyStorage.keysDirectoryURL()?.appendingPathComponent("sftp_known_hosts").path)
                 ?? (NSHomeDirectory() + "/.ssh/known_hosts")
-            engine = SystemSSHTransport(profile: profile, keyURL: keyURL, knownHostsPath: knownHosts)
+            let jumpOptions: [String]
+            if let jumpProfile {
+                do {
+                    jumpOptions = try SSHJumpSupport.proxyJumpOptions(jump: jumpProfile,
+                                                                      knownHostsPath: knownHosts,
+                                                                      interactive: false)
+                } catch {
+                    state = .failed(error.localizedDescription)
+                    return
+                }
+            } else {
+                jumpOptions = []
+            }
+            engine = SystemSSHTransport(profile: profile, keyURL: keyURL,
+                                        knownHostsPath: knownHosts, jumpOptions: jumpOptions)
         case .password:
-            guard SSHHostKeyStore.isTrusted(host: profile.host, port: profile.port) else {
-                state = .failed(String(format: L("尚未信任主机 %@。\n请先在「SSH 终端」工具中成功连接一次该主机完成首次信任确认，再回来使用 SFTP。"), String(profile.host)))
+            // TOFU 覆盖跳板与目标两台主机。
+            var trustTargets: [(host: String, port: Int)] = [(profile.host, profile.port)]
+            if let jumpProfile { trustTargets.insert((jumpProfile.host, jumpProfile.port), at: 0) }
+            for target in trustTargets where !SSHHostKeyStore.isTrusted(host: target.host, port: target.port) {
+                state = .failed(String(format: L("尚未信任主机 %@。\n请先在「SSH 终端」工具中成功连接一次该主机完成首次信任确认，再回来使用 SFTP。"), String(target.host)))
                 return
             }
             do {
                 let auth = try SSHAuthSupport.makeUserAuthDelegate(for: profile)
-                engine = NIOSSHSFTPTransport(profile: profile, auth: auth)
+                let jumpAuth = try jumpProfile.map { try SSHAuthSupport.makeUserAuthDelegate(for: $0) }
+                engine = NIOSSHSFTPTransport(profile: profile, auth: auth,
+                                             jumpProfile: jumpProfile, jumpAuth: jumpAuth)
             } catch {
                 state = .failed(error.localizedDescription)
                 return

@@ -52,10 +52,10 @@ struct GitStartupChooser: View {
             }
 
             HStack(spacing: 10) {
-                primaryCard(icon: "folder.badge.plus", title: "登记仓库", subtitle: "已有本地仓库") {
+                primaryCard(icon: "folder.badge.plus", title: L("登记仓库"), subtitle: L("已有本地仓库")) {
                     beginNew()
                 }
-                primaryCard(icon: "arrow.down.circle", title: "克隆仓库", subtitle: "从远程拉取") {
+                primaryCard(icon: "arrow.down.circle", title: L("克隆仓库"), subtitle: L("从远程拉取")) {
                     cloning = true
                 }
             }

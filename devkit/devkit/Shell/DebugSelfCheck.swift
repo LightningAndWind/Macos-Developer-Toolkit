@@ -14,17 +14,23 @@
 //
 //  响应体封顶、响应缓存、停止在途请求那几项需要一个本地夹具服务器，用 `DEVKIT_SELFCHECK_HTTP_BASE` 指定
 //  （例如 `http://127.0.0.1:8123`），需提供：
-//    /small.json  小响应，验证完整保留
-//    /big.txt     `Content-Length` 必须大于 `HTTPClient.maxBodyBytes`，验证封顶
-//    /big-chunked 同上但走 `Transfer-Encoding: chunked`（无 Content-Length），验证分块路径
-//    /counter     每次返回自增数字 + `Cache-Control: max-age=600`，验证绕开缓存
-//    /slow        延迟 ≥ 5 秒才响应，验证「停止」能中断等待首字节的请求
+//    /small.json      小响应，验证完整保留
+//    /big.txt         `Content-Length` 必须大于 `HTTPClient.maxBodyBytes`，验证封顶
+//    /big-chunked     同上但走 `Transfer-Encoding: chunked`（无 Content-Length），验证分块路径
+//    /counter         每次返回自增数字 + `Cache-Control: max-age=600`，验证绕开缓存
+//    /slow            延迟 ≥ 5 秒才响应，验证「停止」能中断等待首字节的请求
+//    /echo-multipart  解析 multipart 请求体并回 JSON（parts：name/filename/contentType/sha256/text
+//                     + 顶层 contentType 回显），验证 Form-Data 上传
 //  未设置该变量时这几项打印 SKIP 并跳过，不影响退出码。
 //
 
 #if DEBUG
 import AppKit
+import CryptoKit
 import Foundation
+import NIOCore
+import NIOPosix
+import NIOSSH
 import SwiftTerm
 
 @MainActor
@@ -48,13 +54,17 @@ enum DebugSelfCheck {
         checkSnapshotDecodesLegacyJSON()
         checkRequestTimeoutCompatibility()
         checkSSHRecordCompatibility()
+        checkJumpProfileCompatibility()
         checkTerminalNoteStore()
+        checkConfigArchiveRoundTrip()
+        await checkNIOSSHJumpTunnel()
         checkLocalizationResolves()
         await checkCommitClosesFilePreview()
         await checkRemoteManagement()
         await checkResponseBodyCap()
         await checkResponseBodyCapChunked()
         await checkResponseCachingDisabled()
+        await checkMultipartUpload()
         await checkRequestCancel()
         await checkLocalTerminalDismantleKillsShell()
         checkRestoreTearsDownExistingTabs()   // 会清空标签，必须放最后
@@ -64,6 +74,183 @@ enum DebugSelfCheck {
     }
 
     // MARK: - 各项检查
+
+    /// 跳板机：后补字段 `jumpProfileID` 的旧数据兼容、落库持久化、引用悬空降级直连、
+    /// 删除跳板时的引用清理，以及系统 ssh ProxyCommand 的组装规则（两跳不同密钥 / 端口）。
+    private static func checkJumpProfileCompatibility() {
+        // 1) 旧格式 JSON（无 jumpProfileID 键）必须能解码并回退直连。
+        let legacy = #"{"id":"C3333333-3333-3333-3333-333333333333","name":"旧连接","host":"legacy.local","port":22,"username":"root","authKind":"password","createdAt":700000000,"updatedAt":700000000}"#
+        do {
+            let old = try JSONDecoder().decode(SSHProfile.self, from: Data(legacy.utf8))
+            expect(old.jumpProfileID == nil, "旧格式记录（无 jumpProfileID 键）应回退为直连")
+        } catch {
+            expect(false, "旧格式 SSH 记录应能解码（实际失败：\(error.localizedDescription)）—— 否则升级后旧连接会整条静默消失")
+        }
+
+        // 2) 落库 → 读回：跳板引用持久化（解码以 blob 为准）。
+        var jump = SSHProfile(name: "自检跳板", host: "selfcheck-jump.local",
+                              port: 2222, username: "jumper", authKind: .password)
+        jump.password = "p"
+        try? SSHProfileStore.save(jump)
+        var target = SSHProfile(name: "自检目标", host: "selfcheck-target.local",
+                                port: 22, username: "root", authKind: .password)
+        target.password = "t"
+        target.jumpProfileID = jump.id
+        try? SSHProfileStore.save(target)
+        expect(SSHProfileStore.load(id: target.id)?.jumpProfileID == jump.id, "跳板引用应随记录持久化")
+
+        // 3) resolveJump：正常解析；引用悬空 / 引用本地记录 → 一律降级直连。
+        expect(SSHJumpSupport.resolveJump(for: target)?.id == jump.id, "应能解析出跳板记录")
+        var dangling = target
+        dangling.jumpProfileID = UUID()
+        expect(SSHJumpSupport.resolveJump(for: dangling) == nil, "跳板引用悬空时应降级为直连")
+
+        // 4) ProxyCommand（interactive，SSH 终端）：跳板自己的密钥 / 端口进入内层 ssh，-W 指向 %h:%p。
+        var keyJump = SSHProfile(name: "自检密钥跳板", host: "selfcheck-jump2.local",
+                                 port: 22000, username: "kj", authKind: .key)
+        guard let keyDir = SSHKeyStorage.keysDirectoryURL() else {
+            expect(false, "ssh_keys 目录应可解析")
+            SSHProfileStore.delete(jump.id)
+            SSHProfileStore.delete(target.id)
+            return
+        }
+        let keyName = SSHKeyStorage.fileName(for: keyJump.id)
+        try? Data("placeholder-pem".utf8).write(to: keyDir.appendingPathComponent(keyName))
+        keyJump.privateKeyFileName = keyName
+        let keyPath = keyDir.appendingPathComponent(keyName).path
+        if let options = try? SSHJumpSupport.proxyJumpOptions(jump: keyJump, knownHostsPath: nil, interactive: true) {
+            expect(options.count == 2 && options[0] == "-o", "跳板选项应为 -o + ProxyCommand 两条 argv")
+            let cmd = options[1]
+            expect(cmd.hasPrefix("ProxyCommand=/usr/bin/ssh "), "ProxyCommand 应以 /usr/bin/ssh 开头")
+            expect(cmd.contains("-i '\(keyPath)'"), "内层 ssh 应带跳板自己的私钥路径（两跳可用不同密钥）")
+            expect(cmd.contains("-p 22000"), "跳板端口非默认时应进入内层 ssh")
+            expect(cmd.contains("-W %h:%p"), "内层 ssh 隧道终点应为 %h:%p（由外层展开为目标主机）")
+            expect(cmd.contains("'kj@selfcheck-jump2.local'"), "内层 ssh 目标应为跳板 user@host")
+        } else {
+            expect(false, "interactive 模式下密钥跳板的 ProxyCommand 组装不应失败")
+        }
+
+        // 5) 批处理模式（SFTP / AI 执行）：密码跳板必须明确报错；密钥跳板带 BatchMode + 私有 known_hosts。
+        expect((try? SSHJumpSupport.proxyJumpOptions(jump: jump, knownHostsPath: "/tmp/kh", interactive: false)) == nil,
+               "批处理模式 + 密码跳板应抛错（无法交互输入跳板密码）")
+        if let options = try? SSHJumpSupport.proxyJumpOptions(jump: keyJump, knownHostsPath: "/tmp/kh", interactive: false) {
+            expect(options[1].contains("BatchMode=yes"), "批处理模式下内层 ssh 应带 BatchMode")
+            expect(options[1].contains("UserKnownHostsFile='/tmp/kh'"), "批处理模式下内层 ssh 应用应用私有 known_hosts")
+        } else {
+            expect(false, "批处理模式下密钥跳板的 ProxyCommand 组装不应失败")
+        }
+
+        // 6) 删除跳板记录 → 引用方自动降级直连（不留悬空引用）。
+        SSHProfileStore.delete(jump.id)
+        expect(SSHProfileStore.load(id: target.id)?.jumpProfileID == nil, "删除跳板记录后引用方应降级为直连")
+
+        // 收尾。
+        SSHProfileStore.delete(keyJump.id)
+        SSHProfileStore.delete(target.id)
+    }
+
+    /// 配置压缩包：导出 → 校验 → 导入还原 → 覆盖导入的完整回路。
+    /// 全程在临时目录内完成（export 的数据目录是参数，不碰 AppPreferences）；
+    /// 库内容断言用 sqlite3 CLI 查询 —— DatabaseManager 是单例且正开着自检库，不能重开。
+    private static func checkConfigArchiveRoundTrip() {
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory
+            .appendingPathComponent("devkit-selfcheck-archive-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: work) }
+        let sourceDir = work.appendingPathComponent("source-data", isDirectory: true)
+        try? fm.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+
+        // 夹具：一条带跳板引用的记录（证 jumpProfileID 跨压缩包存活）+ ssh_keys 占位私钥。
+        let jump = SSHProfile(name: "自检跳板", host: "selfcheck-jump.local",
+                              port: 2222, username: "jumper", authKind: .password)
+        try? SSHProfileStore.save(jump)
+        var target = SSHProfile(name: "自检目标", host: "selfcheck-target.local",
+                                port: 22, username: "root", authKind: .password)
+        target.jumpProfileID = jump.id
+        try? SSHProfileStore.save(target)
+        defer {
+            SSHProfileStore.delete(jump.id)
+            SSHProfileStore.delete(target.id)
+        }
+
+        let keyName = "selfcheck-\(UUID().uuidString).pem"
+        let keyDir = sourceDir.appendingPathComponent("ssh_keys", isDirectory: true)
+        try? fm.createDirectory(at: keyDir, withIntermediateDirectories: true)
+        try? Data("dummy-key".utf8).write(to: keyDir.appendingPathComponent(keyName))
+
+        // 1) 导出。
+        let zip = work.appendingPathComponent("config.zip")
+        do {
+            try ConfigArchive.export(to: zip, dataDirectory: sourceDir)
+            expect(fm.fileExists(atPath: zip.path), "导出应生成 zip 文件")
+        } catch {
+            expect(false, "导出不应失败：\(error.localizedDescription)")
+            return
+        }
+
+        // 2) 校验：自家包可读 manifest；普通 zip 被拒。
+        do {
+            let manifest = try ConfigArchive.inspect(zip: zip)
+            expect(manifest.format == ConfigArchive.formatVersion, "manifest 应带当前格式版本")
+        } catch {
+            expect(false, "inspect 应能校验刚导出的压缩包：\(error.localizedDescription)")
+        }
+        let fake = work.appendingPathComponent("fake.zip")
+        let plain = work.appendingPathComponent("plain", isDirectory: true)
+        try? fm.createDirectory(at: plain, withIntermediateDirectories: true)
+        try? Data("x".utf8).write(to: plain.appendingPathComponent("readme.txt"))
+        let ditto = Process()
+        ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        ditto.arguments = ["-c", "-k", "--keepParent", plain.path, fake.path]
+        try? ditto.run()
+        ditto.waitUntilExit()
+        expect((try? ConfigArchive.inspect(zip: fake)) == nil, "非 devkit 压缩包应被 inspect 拒绝")
+
+        // 3) 导入到空目录：库与密钥就位，记录与跳板引用跨包存活。
+        let restoreDir = work.appendingPathComponent("restored-data", isDirectory: true)
+        try? fm.createDirectory(at: restoreDir, withIntermediateDirectories: true)
+        do {
+            try ConfigArchive.restore(zip: zip, into: restoreDir)
+            let db = restoreDir.appendingPathComponent(ConfigArchive.databaseFileName)
+            expect(fm.fileExists(atPath: db.path), "导入后应就位 devkit.sqlite3")
+            expect(fm.fileExists(atPath: restoreDir.appendingPathComponent("ssh_keys/\(keyName)").path),
+                   "导入后 ssh_keys 应一并就位")
+            expect(sqliteScalar(db.path, sql: "SELECT COUNT(*) FROM ssh_profiles WHERE host IN ('selfcheck-jump.local','selfcheck-target.local');") == "2",
+                   "导入后的库应含导出时的两条夹具记录")
+            expect(sqliteScalar(db.path, sql: "SELECT COUNT(*) FROM ssh_profiles WHERE host='selfcheck-target.local' AND json_extract(CAST(profile_json AS TEXT),'$.jumpProfileID')='\(jump.id.uuidString)';") == "1",
+                   "跳板引用应跨压缩包存活（jumpProfileID 原样读回）")
+        } catch {
+            expect(false, "restore 不应失败：\(error.localizedDescription)")
+        }
+
+        // 4) 覆盖导入：目标目录已有同名库时走「备份 → 替换 → 清备份」路径。
+        do {
+            try ConfigArchive.restore(zip: zip, into: restoreDir)
+            let leftovers = (try? fm.contentsOfDirectory(atPath: restoreDir.path)) ?? []
+            expect(!leftovers.contains { $0.hasPrefix(".import-backup-") },
+                   "覆盖导入成功后备份目录应被清理（实际：\(leftovers)）")
+            expect(fm.fileExists(atPath: restoreDir.appendingPathComponent(ConfigArchive.databaseFileName).path),
+                   "覆盖导入后库应就位")
+        } catch {
+            expect(false, "覆盖导入不应失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// 用系统 sqlite3 查一个标量（自检专用：避免动 DatabaseManager 单例）。
+    private static func sqliteScalar(_ dbPath: String, sql: String) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = [dbPath, sql]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return nil }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
 
     /// 空库时补几条历史，供「删除后计数收敛」那几项使用。
     ///
@@ -560,10 +747,21 @@ enum DebugSelfCheck {
         // create() 返回的是旧快照；执行体应从**列表里的最新数据**取。
         expect(renamed?.executableBody == "docker restart web", "有内容记事应能取出执行体（去首尾空白）")
 
+        // 新建弹窗「保存」路径：标题与内容由 create 一次带入（取消不落库是面板侧行为，存储侧验证带参新建）。
+        guard let d = store.create(profileID: nil, title: "带名新建", content: "echo hi") else {
+            expect(false, "应能带标题与内容新建记事")
+            SSHProfileStore.delete(category.id)
+            return
+        }
+        let created = store.notes.first { $0.id == d.id }
+        expect(created?.title == "带名新建" && created?.content == "echo hi",
+               "带参新建应保留标题与内容（reload 漏调会让面板看不到新记事）")
+
         // 逐条删除收敛。
         store.delete(id: a.id)
         store.delete(id: b.id)
         store.delete(id: c.id)
+        store.delete(id: d.id)
         expect(store.notes.count == baseline, "删除后列表应收敛回基线（含跨面板同步的 reload）")
 
         // 级联：删除 SSH 记录必须连带删掉该分类下的记事（面板不留空分类）。
@@ -730,6 +928,93 @@ enum DebugSelfCheck {
         }
     }
 
+    /// multipart 上传：真发一次「文本字段 + 文件」的 Form-Data 请求，
+    /// 断言服务端解析出的部件名 / filename / Content-Type / 字节内容与本地一致。
+    ///
+    /// 与「响应体封顶」同理，**必须真发一次**才验证得了：boundary 拼接、CRLF、部件头
+    /// 任何一处写错，服务端都解析不出部件；而本地自建「拼包 + 拆包」的对称测试
+    /// 很容易两头犯同一个错，互相印证却都错。夹具 `/echo-multipart` 用独立实现
+    /// （Python `email` 解析器）拆包后回 JSON，才是有效断言。
+    ///
+    /// 附带 multipart 后补字段的旧格式解码回归 —— `multipartFields` / `multipartFiles`
+    /// 是后补的非可选字段，旧 JSON 里没有这两个键，必须回退空数组，否则升级后
+    /// 旧集合与历史整片静默消失（要害同 `checkRequestTimeoutCompatibility`）。
+    private static func checkMultipartUpload() async {
+        // 1) 旧格式 Body（无 multipart 键）解码回归
+        let legacyBodyJSON = #"{"kind":"Form URL-encoded","text":"","formFields":[]}"#
+        if let body = try? JSONDecoder().decode(HTTPBodyModel.self, from: Data(legacyBodyJSON.utf8)) {
+            expect(body.multipartFields.isEmpty && body.multipartFiles.isEmpty,
+                   "旧格式 Body（无 multipart 键）解码后 multipart 字段应回退空数组")
+        } else {
+            expect(false, "旧格式 Body 应能解码 —— 否则升级后旧集合与历史会整片静默消失")
+        }
+
+        // 2) 真发（需要夹具）
+        guard let base = fixtureBase else {
+            print("[selfcheck] SKIP  multipart 上传（未设置 DEVKIT_SELFCHECK_HTTP_BASE）")
+            return
+        }
+
+        // 夹具文件：固定 256 字节 + `.png` 扩展名 —— 顺带验证 MIME 按扩展名推断为 image/png，
+        // 字节是否逐位到达用 sha256 对照（二进制内容无法像文本字段那样直接比对）。
+        let payload = Data((0..<256).map { UInt8($0) })
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("devkit-selfcheck-\(UUID().uuidString).png")
+        do {
+            try payload.write(to: fileURL)
+        } catch {
+            expect(false, "自检夹具文件写入失败：\(error.localizedDescription)")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        var request = HTTPRequestModel(method: "POST", urlString: "\(base)/echo-multipart")
+        request.body.kind = .multipart
+        request.body.multipartFields = [HTTPKV(key: "caption", value: "hello 自检")]
+        request.body.multipartFiles = [HTTPMultipartFile(fieldName: "file", filePath: fileURL.path)]
+
+        do {
+            let response = try await HTTPClient().send(request)
+            expect(response.statusCode == 200, "multipart 上传应返回 200（实际 \(response.statusCode)）")
+            guard let json = try? JSONSerialization.jsonObject(with: response.bodyData) as? [String: Any],
+                  let parts = json["parts"] as? [[String: Any]]
+            else {
+                expect(false, "echo-multipart 响应应是含 parts 数组的 JSON")
+                return
+            }
+            // 请求 Content-Type 是否带 boundary 也由夹具回显 —— 头与体的 boundary 错位是
+            // multipart 最典型的坏法（服务端 400 或解析出 0 个部件），必须一起看。
+            expect((json["contentType"] as? String)?.hasPrefix("multipart/form-data; boundary=") == true,
+                   "请求 Content-Type 应为带 boundary 的 multipart/form-data（实际 \(json["contentType"] ?? "无")）")
+            let caption = parts.first { ($0["name"] as? String) == "caption" }
+            expect(caption?["text"] as? String == "hello 自检",
+                   "文本部件应原样到达（实际 \(caption?["text"] ?? "缺失")）")
+            let filePart = parts.first { ($0["name"] as? String) == "file" }
+            expect(filePart?["filename"] as? String == fileURL.lastPathComponent,
+                   "文件部件 filename 应为文件名（实际 \(filePart?["filename"] ?? "缺失")）")
+            expect(filePart?["contentType"] as? String == "image/png",
+                   "文件部件 MIME 应按扩展名推断为 image/png（实际 \(filePart?["contentType"] ?? "缺失")）")
+            expect(filePart?["sha256"] as? String == sha256Hex(payload),
+                   "文件字节应逐位一致（本地 \(sha256Hex(payload).prefix(8))…，服务端 \((filePart?["sha256"] as? String ?? "缺失").prefix(8))…）")
+        } catch {
+            expect(false, "multipart 上传请求不应失败：\(error.localizedDescription)")
+        }
+
+        // 3) cURL 导出：应为 -F 形式；若同时导出 `--data` 或 Content-Type 头，
+        //    粘到终端执行必然失败（-F 自带 boundary，手写头会盖掉它）。
+        let curl = CurlExporter.curlCommand(from: request)
+        expect(curl.contains("-F 'caption=hello 自检'"),
+               "cURL 导出应包含文本字段 -F（实际：\(curl)）")
+        expect(curl.contains("-F 'file=@\(fileURL.path);type=image/png'"),
+               "cURL 导出应包含文件 -F 与按扩展名推断的 type（实际：\(curl)）")
+        expect(!curl.contains("--data") && !curl.contains("-H 'Content-Type"),
+               "multipart 的 cURL 导出不应包含 --data 或 Content-Type 头（实际：\(curl)）")
+    }
+
+    private static func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// 「停止」必须真的能中断在途请求。
     ///
     /// 这是放开超时上限（最长 1 小时）后新引入的能力，也属于最容易「看起来能用、其实没用」的一类：
@@ -837,6 +1122,74 @@ enum DebugSelfCheck {
         let hint = L("还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。")
         expect(hint != "还没有 AI 调用。启用并在客户端配置后，这里的记录可查看模型都做了什么。",
                "L() AI 接入页空态提示应查到英文译文（实得 \(hint)）")
+        // multipart（Form-Data）相关：分区标题 / 文件选择 / Kind 枚举 rawValue / 错误文案。
+        // 后两类走纯 String 通道（HTTPSection.title、Label 三目、String(format:)），构建期提取不到，
+        // 目录漏录不会报任何错 —— 只能靠这里的运行期断言兜住。
+        expect(L("文本字段") == "Text fields", "L() multipart 分区标题应查到英文译文（实得 \(L("文本字段"))）")
+        expect(L("文件") == "Files", "L() multipart 分区标题应查到英文译文（实得 \(L("文件"))）")
+        expect(L("选择文件") == "Select file", "L() 选择文件按钮应查到英文译文（实得 \(L("选择文件"))）")
+        expect(L("无") == "None", "L() Body/认证 Kind 枚举的「无」应查到英文译文（实得 \(L("无"))）")
+        let uploadError = L("上传文件不可读（字段 %@）：%@。文件可能已被移动或删除，请重新选择。")
+        expect(uploadError.hasPrefix("Upload file unreadable"),
+               "L() multipart 文件不可读报错应查到英文译文（实得 \(uploadError)）")
+    }
+
+    /// NIOSSH 跳板隧道实测：进程内起两个夹具 SSH 服务器（跳板 + 目标），
+    /// 用真实 `SSHClient`（密码引擎）走「连跳板 → 认证 → direct-tcpip → 二层 SSH 握手 → shell」全链路，
+    /// 断言能收到目标服务器 session 横幅。这是纯代码评审验不住的路径（通道叠加 / 事件循环线程安全），
+    /// 夹具即 swift-nio-ssh 官方 NIOSSHServer 示例的极简版（硬编码密码 nio/gottagofast，host key 动态生成）。
+    private static func checkNIOSSHJumpTunnel() async {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        defer { try? group.syncShutdownGracefully() }
+
+        guard let target = SelfCheckSSHFixture.start(group: group),
+              let jump = SelfCheckSSHFixture.start(group: group) else {
+            expect(false, "应能在进程内启动两个夹具 SSH 服务器")
+            return
+        }
+        defer {
+            target.channel.close(mode: .all, promise: nil)
+            jump.channel.close(mode: .all, promise: nil)
+        }
+
+        var targetProfile = SSHProfile(name: "自检隧道目标", host: "127.0.0.1",
+                                       port: target.port, username: "nio", authKind: .password)
+        targetProfile.password = "gottagofast"
+        var jumpProfile = SSHProfile(name: "自检隧道跳板", host: "127.0.0.1",
+                                     port: jump.port, username: "nio", authKind: .password)
+        jumpProfile.password = "gottagofast"
+        targetProfile.jumpProfileID = jumpProfile.id
+
+        let client = SSHClient()
+        client.trustHandler = { _, _ in true }   // 夹具 host key 动态生成，直接信任
+        await client.connect(profile: targetProfile, cols: 80, rows: 24)
+
+        if case .failed(let reason) = client.state {
+            expect(false, "经跳板连接应成功（实际失败：\(reason)）")
+            client.disconnect()
+            return
+        }
+        guard case .connected = client.state else {
+            expect(false, "经跳板连接后状态应为 connected（实际 \(client.state)）")
+            client.disconnect()
+            return
+        }
+
+        // 横幅经两层 SSH + direct-tcpip 隧道回到本地流（AsyncStream 缓冲不丢数据，事后订阅亦可）。
+        let box = SelfCheckOutputBox()
+        let collector = Task {
+            for await bytes in client.incoming {
+                box.append(String(decoding: bytes, as: UTF8.self))
+            }
+        }
+        var sawBanner = false
+        for _ in 0..<200 {   // 上限 10s；本机回环通常毫秒级
+            if box.text.contains(SelfCheckSSHFixture.bannerText) { sawBanner = true; break }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        client.disconnect()
+        collector.cancel()
+        expect(sawBanner, "经跳板隧道应收到目标 shell 横幅（实得：\(box.text.isEmpty ? "（空）" : box.text)）")
     }
 
     // MARK: - 断言
@@ -848,6 +1201,200 @@ enum DebugSelfCheck {
         } else {
             failures += 1
             print("[selfcheck] FAIL  \(what)")
+        }
+    }
+}
+
+// MARK: - 跳板隧道夹具（进程内 NIOSSH 服务器）
+
+/// 收集 SSHClient 输出流的线程安全盒子（收集任务与轮询方并发访问）。
+private nonisolated final class SelfCheckOutputBox: @unchecked Sendable {
+    private let lock = NSLock()
+    nonisolated(unsafe) private var storage = ""
+
+    var text: String {
+        lock.lock(); defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ value: String) {
+        lock.lock(); defer { lock.unlock() }
+        storage += value
+    }
+}
+
+private enum SelfCheckFixtureError: Error {
+    case unsupportedChannel
+}
+
+/// 夹具 SSH 服务器（swift-nio-ssh 官方 NIOSSHServer 示例的极简版）：
+/// 硬编码密码认证（nio / gottagofast）、host key 动态生成、session 开场写一段横幅、
+/// direct-tcpip 按请求真实转发到目标 —— 与生产跳板机的通道语义一致。
+private nonisolated enum SelfCheckSSHFixture {
+    static let bannerText = "TARGET-SHELL-OK\n"
+
+    struct Running {
+        let channel: Channel
+        let port: Int
+    }
+
+    static func start(group: MultiThreadedEventLoopGroup) -> Running? {
+        let hostKey = NIOSSHPrivateKey(ed25519Key: .init())
+        let bootstrap = ServerBootstrap(group: group)
+            .childChannelInitializer { channel in
+                channel.eventLoop.makeCompletedFuture {
+                    try channel.pipeline.syncOperations.addHandler(
+                        NIOSSHHandler(
+                            role: .server(.init(hostKeys: [hostKey],
+                                                userAuthDelegate: SelfCheckPasswordAuthDelegate(),
+                                                globalRequestDelegate: nil)),
+                            allocator: channel.allocator,
+                            inboundChildChannelInitializer: { child, channelType in
+                                childInitializer(child: child, channelType: channelType, group: group)
+                            }
+                        )
+                    )
+                }
+            }
+            .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+        guard let channel = try? bootstrap.bind(host: "127.0.0.1", port: 0).wait(),
+              let port = channel.localAddress?.port else { return nil }
+        return Running(channel: channel, port: port)
+    }
+
+    /// session → 横幅；direct-tcpip → 真实 TCP 连到请求的目标并双向对接。
+    private static func childInitializer(child: Channel,
+                                         channelType: SSHChannelType,
+                                         group: EventLoopGroup) -> EventLoopFuture<Void> {
+        switch channelType {
+        case .session:
+            return child.eventLoop.makeCompletedFuture {
+                try child.pipeline.syncOperations.addHandler(SelfCheckBannerHandler())
+            }
+        case .directTCPIP(let direct):
+            let (ours, theirs) = SelfCheckGlueHandler.matchedPair()
+            return child.eventLoop.makeCompletedFuture {
+                try child.pipeline.syncOperations.addHandlers([SSHChannelDataByteAdapter(), ours])
+            }.flatMap {
+                ClientBootstrap(group: group)
+                    .channelInitializer { outbound in
+                        outbound.eventLoop.makeCompletedFuture {
+                            try outbound.pipeline.syncOperations.addHandler(theirs)
+                        }
+                    }
+                    .connect(host: direct.targetHost, port: direct.targetPort)
+            }.map { _ in }
+        case .forwardedTCPIP:
+            return child.eventLoop.makeFailedFuture(SelfCheckFixtureError.unsupportedChannel)
+        }
+    }
+}
+
+/// nio / gottagofast 以外一律拒绝（与官方示例一致）。
+private nonisolated final class SelfCheckPasswordAuthDelegate: NIOSSHServerUserAuthenticationDelegate, @unchecked Sendable {
+    var supportedAuthenticationMethods: NIOSSHAvailableUserAuthenticationMethods { .password }
+
+    nonisolated func requestReceived(
+        request: NIOSSHUserAuthenticationRequest,
+        responsePromise: EventLoopPromise<NIOSSHUserAuthenticationOutcome>
+    ) {
+        guard request.username == "nio", case .password(let passwordRequest) = request.request,
+              passwordRequest.password == "gottagofast" else {
+            responsePromise.succeed(.failure)
+            return
+        }
+        responsePromise.succeed(.success)
+    }
+}
+
+/// session 子通道：激活即写横幅（客户端收到即证明 shell 数据通路全通）。
+private nonisolated final class SelfCheckBannerHandler: ChannelDuplexHandler, @unchecked Sendable {
+    typealias InboundIn = SSHChannelData
+    typealias OutboundIn = SSHChannelData
+    typealias OutboundOut = SSHChannelData
+
+    nonisolated func channelActive(context: ChannelHandlerContext) {
+        var buffer = context.channel.allocator.buffer(capacity: SelfCheckSSHFixture.bannerText.utf8.count)
+        buffer.writeString(SelfCheckSSHFixture.bannerText)
+        context.writeAndFlush(wrapOutboundOut(SSHChannelData(type: .channel, data: .byteBuffer(buffer))),
+                              promise: nil)
+        context.fireChannelActive()
+    }
+}
+
+/// 双通道字节对接（官方示例 GlueHandler 同款）：一侧收到什么，另一侧原样写什么。
+private nonisolated final class SelfCheckGlueHandler: ChannelDuplexHandler, @unchecked Sendable {
+    typealias InboundIn = NIOAny
+    typealias OutboundIn = NIOAny
+    typealias OutboundOut = NIOAny
+
+    private var partner: SelfCheckGlueHandler?
+    private var context: ChannelHandlerContext?
+    private var pendingRead = false
+
+    private init() {}
+
+    static func matchedPair() -> (SelfCheckGlueHandler, SelfCheckGlueHandler) {
+        let first = SelfCheckGlueHandler()
+        let second = SelfCheckGlueHandler()
+        first.partner = second
+        second.partner = first
+        return (first, second)
+    }
+
+    private func partnerWrite(_ data: NIOAny) { context?.write(data, promise: nil) }
+    private func partnerFlush() { context?.flush() }
+    private func partnerWriteEOF() { context?.close(mode: .output, promise: nil) }
+    private func partnerCloseFull() { context?.close(promise: nil) }
+    private func partnerBecameWritable() {
+        if pendingRead {
+            pendingRead = false
+            context?.read()
+        }
+    }
+    private var partnerWritable: Bool { context?.channel.isWritable ?? false }
+
+    nonisolated func handlerAdded(context: ChannelHandlerContext) {
+        self.context = context
+        if context.channel.isWritable { partner?.partnerBecameWritable() }
+    }
+
+    nonisolated func handlerRemoved(context: ChannelHandlerContext) {
+        self.context = nil
+        partner = nil
+    }
+
+    nonisolated func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        partner?.partnerWrite(data)
+    }
+
+    nonisolated func channelReadComplete(context: ChannelHandlerContext) {
+        partner?.partnerFlush()
+    }
+
+    nonisolated func channelInactive(context: ChannelHandlerContext) {
+        partner?.partnerCloseFull()
+    }
+
+    nonisolated func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let event = event as? ChannelEvent, case .inputClosed = event {
+            partner?.partnerWriteEOF()
+        }
+    }
+
+    nonisolated func errorCaught(context: ChannelHandlerContext, error: Error) {
+        partner?.partnerCloseFull()
+    }
+
+    nonisolated func channelWritabilityChanged(context: ChannelHandlerContext) {
+        if context.channel.isWritable { partner?.partnerBecameWritable() }
+    }
+
+    nonisolated func read(context: ChannelHandlerContext) {
+        if let partner, partner.partnerWritable {
+            context.read()
+        } else {
+            pendingRead = true
         }
     }
 }

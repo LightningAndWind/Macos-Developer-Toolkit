@@ -83,6 +83,11 @@ struct SSHProfileEditorView: View {
         .onAppear {
             if let forcedKind { draft.kind = forcedKind }
             keyDisplay = draft.privateKeyFileName != nil ? L("已配置私钥") : L("未选择")
+            // 跳板引用悬空（被引用记录已删 / 自身配了跳板）时回落直连，避免选择器停在无匹配项。
+            if let jumpID = draft.jumpProfileID,
+               !jumpCandidates.contains(where: { $0.id == jumpID }) {
+                draft.jumpProfileID = nil
+            }
         }
     }
 
@@ -124,8 +129,32 @@ struct SSHProfileEditorView: View {
 
         authSection
 
+        jumpSection
+
         TextField("默认目录（远端）", text: workingDirectoryBinding,
                   prompt: Text("/var/www（可留空）"))
+    }
+
+    /// 跳板机选择：直连，或经由另一条远程记录转发（本机 → 跳板 → 目标）。
+    /// 候选排除自身与「自身已配跳板」的记录，保持单跳、防止成环。
+    @ViewBuilder
+    private var jumpSection: some View {
+        Picker("跳板机", selection: $draft.jumpProfileID) {
+            Text("直连（不使用跳板）").tag(UUID?.none)
+            ForEach(jumpCandidates) { candidate in
+                Text("\(candidate.name)（\(candidate.connectSummary)）").tag(UUID?.some(candidate.id))
+            }
+        }
+        Text("先连接所选主机，再经由它转发到本主机；适合本机连不通目标、但能连通跳板机的场景。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    /// 可用作跳板的记录：远程 + 非自身 + 自身不经跳板（单跳），按名称排序。
+    private var jumpCandidates: [SSHProfile] {
+        SSHProfileStore.allRequests()
+            .filter { $0.isRemote && $0.id != draft.id && $0.jumpProfileID == nil }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     @ViewBuilder

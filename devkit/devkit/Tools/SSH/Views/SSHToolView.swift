@@ -139,7 +139,7 @@ struct SSHToolView: View {
             Image(systemName: "wifi.slash")
                 .font(.system(size: 26))
                 .foregroundStyle(.secondary)
-            Text(tool.activeProfile == nil ? "未选择连接" : "会话已断开")
+            Text(tool.activeProfile == nil ? L("未选择连接") : L("会话已断开"))
                 .foregroundStyle(.secondary)
             if tool.activeProfile != nil {
                 Button("重新连接") { tool.reconnect() }
@@ -170,7 +170,7 @@ private struct SSHTerminalPlaceholder: View {
             switch state {
             case .connecting:
                 ProgressView().controlSize(.small)
-                Text(attempt > 1 ? String(format: L("网络暂不可达，自动重试中（第 %@ 次）…"), String(attempt)) : "正在连接…")
+                Text(attempt > 1 ? String(format: L("网络暂不可达，自动重试中（第 %@ 次）…"), String(attempt)) : L("正在连接…"))
                     .foregroundStyle(.secondary)
             case .failed(let message):
                 Image(systemName: "exclamationmark.triangle")

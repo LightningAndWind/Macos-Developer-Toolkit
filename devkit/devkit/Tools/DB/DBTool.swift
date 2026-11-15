@@ -36,7 +36,7 @@ final class DBTool: DevkitTool {
     static let descriptor = ToolDescriptor(
         id: "tool.db",
         title: "数据库",
-        symbolName: "cylinder.and.ellipse",
+        symbolName: "cylinder.split.1x2",
         category: .network,
         subtitle: "连接 MySQL / Redis，命令行式执行 SQL 与命令，也可供 AI 通过本地接口使用。",
         allowsMultipleInstances: true,
@@ -88,9 +88,9 @@ final class DBTool: DevkitTool {
         selectedConnection?.name
     }
 
-    var hasUnsavedContent: Bool {
-        !output.isEmpty
-    }
+    /// 控制台输出是临时回显（不持久化，重启后从空白开始），与 SSH 终端同理：
+    /// 执行过语句≠有「未保存内容」，不驱动标签 `*` 标记与关闭确认框。
+    var hasUnsavedContent: Bool { false }
 
     func makeView() -> AnyView {
         AnyView(DBToolView(tool: self))

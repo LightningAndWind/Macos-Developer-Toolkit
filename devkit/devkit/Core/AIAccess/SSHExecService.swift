@@ -65,14 +65,14 @@ enum SSHExecError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .hostNotTrusted:
-            return "该主机尚未在 devkit 中信任：请先在「SSH 终端」工具里连接一次这条记录，确认主机可信后再使用 AI 接入"
+            return L("该主机尚未在 devkit 中信任：请先在「SSH 终端」工具里连接一次这条记录，确认主机可信后再使用 AI 接入")
         case .connectFailed(let m): return String(format: L("连接失败：%@"), String(m))
-        case .connectTimeout: return "连接超时"
-        case .keyMissing: return "找不到私钥文件，请在 devkit 中重新选择"
+        case .connectTimeout: return L("连接超时")
+        case .keyMissing: return L("找不到私钥文件，请在 devkit 中重新选择")
         case .badWorkingDirectory(let m): return String(format: L("默认目录不可用：%@"), String(m))
-        case .sessionNotFound: return "会话不存在（可能已被回收），请重新 ssh_open_session"
-        case .sessionClosed: return "会话已关闭（超时或达到存活上限），请重新 ssh_open_session"
-        case .sessionLimitReached: return "并发会话数已达上限（8），请先 ssh_close_session 释放"
+        case .sessionNotFound: return L("会话不存在（可能已被回收），请重新 ssh_open_session")
+        case .sessionClosed: return L("会话已关闭（超时或达到存活上限），请重新 ssh_open_session")
+        case .sessionLimitReached: return L("并发会话数已达上限（8），请先 ssh_close_session 释放")
         }
     }
 }
@@ -84,11 +84,11 @@ nonisolated enum SSHExec {
     static func ioErrorText(_ error: IOError) -> String {
         switch error.errnoCode {
         case ECONNREFUSED:
-            return "连接被拒绝（目标端口未开放）"
+            return L("连接被拒绝（目标端口未开放）")
         case ETIMEDOUT:
-            return "连接超时"
+            return L("连接超时")
         case EHOSTUNREACH, ENETUNREACH:
-            return "网络不可达"
+            return L("网络不可达")
         default:
             return error.localizedDescription
         }
@@ -170,101 +170,79 @@ nonisolated final class NIOSSHExecTransport: SSHExecTransport, @unchecked Sendab
     let closed = AsyncSignal()
     let exitStatus = ExitStatusBox()
 
-    private let host: String
-    private let port: Int
+    private let profile: SSHProfile
+    private let jumpProfile: SSHProfile?
     private let auth: NIOSSHClientUserAuthenticationDelegate
+    private let jumpAuth: NIOSSHClientUserAuthenticationDelegate?
     private let lock = NSLock()
     private var connection: Channel?
+    /// 承载目标 SSH 的通道（直连与 connection 相同；经跳板为 direct-tcpip 子通道）。
+    private var carrier: Channel?
     private var shell: Channel?
-    /// 连接超时标志：仅在事件循环线程上读写（connect 回调与 scheduleTask 同环串行）。
-    nonisolated(unsafe) private var connectTimedOut = false
 
-    init(host: String, port: Int, auth: NIOSSHClientUserAuthenticationDelegate) {
-        self.host = host
-        self.port = port
+    init(profile: SSHProfile,
+         jumpProfile: SSHProfile?,
+         auth: NIOSSHClientUserAuthenticationDelegate,
+         jumpAuth: NIOSSHClientUserAuthenticationDelegate?) {
+        self.profile = profile
+        self.jumpProfile = jumpProfile
         self.auth = auth
+        self.jumpAuth = jumpAuth
     }
 
     func launch() async throws {
-        let bootstrap = ClientBootstrap(group: SSHExec.group)
-            .channelInitializer { [auth] channel in
-                channel.eventLoop.makeCompletedFuture {
-                    let ssh = NIOSSHHandler(
-                        role: .client(
-                            .init(userAuthDelegate: auth,
-                                  serverAuthDelegate: AIExecAcceptAllHostKeysDelegate())
-                        ),
-                        allocator: channel.allocator,
-                        inboundChildChannelInitializer: nil
-                    )
-                    try channel.pipeline.syncOperations.addHandler(ssh)
-                }
-            }
-            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-
-        // 连接超时：到点仍未完成则让 promise 失败；若此后 TCP 才连上，把迟到通道关掉防泄漏。
-        let connectFuture = bootstrap.connect(host: host, port: port)
-        let promise = connectFuture.eventLoop.makePromise(of: Channel.self)
-        let timeoutTask = connectFuture.eventLoop.scheduleTask(in: .seconds(20)) { [weak self] in
-            self?.connectTimedOut = true
-            promise.fail(SSHExecError.connectTimeout)
-            connectFuture.whenComplete { result in
-                if case .success(let late) = result { late.close(promise: nil) }
-            }
-        }
-        connectFuture.whenComplete { [weak self] result in
-            timeoutTask.cancel()
-            guard let self, !self.connectTimedOut else {
-                if case .success(let ch) = result { ch.close(promise: nil) }
-                return
-            }
-            switch result {
-            case .success(let channel): promise.succeed(channel)
-            case .failure(let error): promise.fail(error)
-            }
-        }
-        let conn: Channel
+        // 直连与跳板统一走承载工厂；TCP 超时经 bootstrap.connectTimeout 生效（原 20s 语义不变）。
+        let established: SSHCarrierBuilder.Established
         do {
-            conn = try await promise.futureResult.get()
-        } catch let error as SSHExecError {
-            throw error
+            established = try await SSHCarrierBuilder.establish(profile: profile,
+                                                                jumpProfile: jumpProfile,
+                                                                targetAuth: auth,
+                                                                jumpAuth: jumpAuth,
+                                                                group: SSHExec.group,
+                                                                connectTimeout: .seconds(20))
+        } catch is SSHExecError {
+            throw SSHExecError.connectTimeout
+        } catch let error as ChannelError {
+            if case .connectTimeout = error {
+                throw SSHExecError.connectTimeout
+            }
+            // ChannelError 等底层类型 localizedDescription 晦涩（如 "ChannelError error 0"），统一为可读文案。
+            throw SSHExecError.connectFailed(L("无法建立连接（网络不可达、端口未开放或连接超时）"))
         } catch let error as NIOConnectionError {
             // NIO 的 localizedDescription 只有 "NIOConnectionError error 1" 这类晦涩文本，
             // 且其 description 含目标 host —— 翻译成固定文案，避免敏感信息外流。
             if error.dnsAError != nil || error.dnsAAAAError != nil {
-                throw SSHExecError.connectFailed("域名解析失败")
+                throw SSHExecError.connectFailed(L("域名解析失败"))
             }
             let refused = error.connectionErrors.contains { failure in
                 (failure.error as? IOError)?.errnoCode == ECONNREFUSED
             }
             throw SSHExecError.connectFailed(refused
-                                             ? "连接被拒绝（目标端口未开放）"
-                                             : "无法建立 TCP 连接（网络不可达或超时）")
+                                             ? L("连接被拒绝（目标端口未开放）")
+                                             : L("无法建立 TCP 连接（网络不可达或超时）"))
         } catch let error as IOError {
             throw SSHExecError.connectFailed(SSHExec.ioErrorText(error))
-        } catch is SSHExecError {
-            throw SSHExecError.connectTimeout
         } catch let error as NIOSSHError {
             // 服务器拒绝认证后通常直接断 TCP（报 tcpShutdown），必须与网络故障区分，
             // 否则模型会把凭据问题误判为网络波动而盲目重试。
             let text = String(describing: error).lowercased()
             if text.contains("auth") {
-                throw SSHExecError.connectFailed("认证失败：请检查 devkit 中该记录保存的用户名 / 密码 / 私钥")
+                throw SSHExecError.connectFailed(L("认证失败：请检查 devkit 中该记录保存的用户名 / 密码 / 私钥"))
             }
-            throw SSHExecError.connectFailed("连接被远端关闭（常见原因：认证失败、服务器限制连接或网络中断）；若确认凭据无误可重试")
+            throw SSHExecError.connectFailed(L("连接被远端关闭（常见原因：认证失败、服务器限制连接或网络中断）；若确认凭据无误可重试"))
         } catch {
-            // ChannelError 等底层类型 localizedDescription 晦涩（如 "ChannelError error 0"），统一为可读文案。
-            throw SSHExecError.connectFailed("无法建立连接（网络不可达、端口未开放或连接超时）")
+            throw SSHExecError.connectFailed(L("无法建立连接（网络不可达、端口未开放或连接超时）"))
         }
 
         lock.lock()
-        connection = conn
+        connection = established.rootChannel
+        carrier = established.carrierChannel
         lock.unlock()
 
-        // 在已建立的连接上创建 session 子通道并启动 shell（不申请 pty）。
+        // 在承载通道上创建 session 子通道并启动 shell（不申请 pty）。
         // 必须在连接事件循环的 future 回调里调 createChannel（线程安全要求，见 SSHClient.openShell 注释）。
-        let shellChannel = try await conn.pipeline.handler(type: NIOSSHHandler.self).flatMap { sshHandler in
-            let shellPromise = conn.eventLoop.makePromise(of: Channel.self)
+        let shellChannel = try await established.carrierChannel.pipeline.handler(type: NIOSSHHandler.self).flatMap { sshHandler in
+            let shellPromise = established.carrierChannel.eventLoop.makePromise(of: Channel.self)
             sshHandler.createChannel(shellPromise, channelType: .session) { child, _ in
                 child.eventLoop.makeCompletedFuture {
                     try child.pipeline.syncOperations.addHandler(
@@ -294,11 +272,14 @@ nonisolated final class NIOSSHExecTransport: SSHExecTransport, @unchecked Sendab
     func shutdown() {
         lock.lock()
         let conn = connection
+        let carrierChannel = carrier
         let sh = shell
         connection = nil
+        carrier = nil
         shell = nil
         lock.unlock()
         sh?.close(mode: .all, promise: nil)
+        carrierChannel?.close(mode: .all, promise: nil)
         conn?.close(mode: .all, promise: nil)
         closed.fire()
     }
@@ -356,13 +337,6 @@ nonisolated final class SSHExecShellHandler: ChannelDuplexHandler, @unchecked Se
     }
 }
 
-/// 主机信任在连接前已按 host:port 维度校验（沿用 SSH 终端工具的 TOFU 记录），故此处直接放行。
-nonisolated final class AIExecAcceptAllHostKeysDelegate: NIOSSHClientServerAuthenticationDelegate {
-    nonisolated func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
-        validationCompletePromise.succeed(())
-    }
-}
-
 // MARK: - 系统 ssh 引擎（私钥认证）
 
 nonisolated final class SystemSSHExecTransport: SSHExecTransport, @unchecked Sendable {
@@ -377,8 +351,9 @@ nonisolated final class SystemSSHExecTransport: SSHExecTransport, @unchecked Sen
     private var stdinHandle: FileHandle?
     private var stderrTail = Data()
 
-    init(keyURL: URL, knownHostsPath: String, host: String, port: Int, username: String) {
-        self.arguments = [
+    init(keyURL: URL, knownHostsPath: String, host: String, port: Int, username: String,
+         jumpOptions: [String] = []) {
+        self.arguments = jumpOptions + [
             "-o", "BatchMode=yes",
             "-o", "PreferredAuthentications=publickey",
             "-o", "NumberOfPasswordPrompts=0",
@@ -475,7 +450,7 @@ nonisolated final class SystemSSHExecTransport: SSHExecTransport, @unchecked Sen
         let tail = String(decoding: stderrTail, as: UTF8.self)
         lock.unlock()
         let trimmed = tail.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "系统 ssh 已退出" : trimmed
+        return trimmed.isEmpty ? L("系统 ssh 已退出") : trimmed
     }
 
     private func recordStderrTail(_ data: Data) {
@@ -816,16 +791,26 @@ final class SSHSessionRegistry {
 
     // MARK: - 引擎构造
 
-    /// 密码认证 → 进程内 NIOSSH（要求主机已在 SSH 终端工具完成 TOFU 信任）；
-    /// 私钥认证 → 系统 /usr/bin/ssh 子进程（与终端 / SFTP 工具的双引擎约定一致）。
+    /// 密码认证 → 进程内 NIOSSH（要求跳板与目标主机均已在 SSH 终端工具完成 TOFU 信任）；
+    /// 私钥认证 → 系统 /usr/bin/ssh 子进程（与终端 / SFTP 工具的双引擎约定一致；
+    /// 经跳板时跳板也须私钥认证——批处理模式无法交互输入跳板密码）。
     private func makeTransport(for profile: SSHProfile) throws -> SSHExecTransport {
+        let jumpProfile = SSHJumpSupport.resolveJump(for: profile)
         switch profile.authKind {
         case .password:
-            guard SSHHostKeyStore.isTrusted(host: profile.host, port: profile.port) else {
+            // TOFU 覆盖跳板与目标两台主机（直连时数组只有目标一项）。
+            var trustTargets: [(host: String, port: Int)] = [(profile.host, profile.port)]
+            if let jumpProfile { trustTargets.insert((jumpProfile.host, jumpProfile.port), at: 0) }
+            for target in trustTargets
+            where !SSHHostKeyStore.isTrusted(host: target.host, port: target.port) {
                 throw SSHExecError.hostNotTrusted
             }
             let auth = try SSHAuthSupport.makeUserAuthDelegate(for: profile)
-            return NIOSSHExecTransport(host: profile.host, port: profile.port, auth: auth)
+            let jumpAuth = try jumpProfile.map { try SSHAuthSupport.makeUserAuthDelegate(for: $0) }
+            return NIOSSHExecTransport(profile: profile,
+                                       jumpProfile: jumpProfile,
+                                       auth: auth,
+                                       jumpAuth: jumpAuth)
         case .key:
             guard let fileName = profile.privateKeyFileName,
                   let keyURL = SSHKeyStorage.resolvedURL(fileName: fileName) else {
@@ -833,11 +818,17 @@ final class SSHSessionRegistry {
             }
             let knownHosts = SSHKeyStorage.keysDirectoryURL()?
                 .appendingPathComponent("ai_known_hosts").path ?? "/dev/null"
+            let jumpOptions: [String] = try jumpProfile.map {
+                try SSHJumpSupport.proxyJumpOptions(jump: $0,
+                                                    knownHostsPath: knownHosts,
+                                                    interactive: false)
+            } ?? []
             return SystemSSHExecTransport(keyURL: keyURL,
                                           knownHostsPath: knownHosts,
                                           host: profile.host,
                                           port: profile.port,
-                                          username: profile.username)
+                                          username: profile.username,
+                                          jumpOptions: jumpOptions)
         }
     }
 }

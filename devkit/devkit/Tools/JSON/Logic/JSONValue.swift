@@ -45,11 +45,11 @@ indirect enum JSONValue {
     /// 类型中文名，用于状态栏与树视图标签。
     var typeLabel: String {
         switch self {
-        case .object: return "对象"
-        case .array:  return "数组"
-        case .string: return "字符串"
-        case .number: return "数字"
-        case .bool:   return "布尔"
+        case .object: return L("对象")
+        case .array:  return L("数组")
+        case .string: return L("字符串")
+        case .number: return L("数字")
+        case .bool:   return L("布尔")
         case .null:   return "null"
         }
     }
