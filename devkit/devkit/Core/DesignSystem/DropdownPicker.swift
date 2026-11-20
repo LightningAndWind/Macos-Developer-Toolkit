@@ -68,6 +68,8 @@ struct DropdownPicker<Label: View>: View {
     var defersActionUntilDismissed: Bool = false
     @ViewBuilder var label: (Bool) -> Label
 
+    @Environment(\.minimalMode) private var minimalMode
+
     @State private var isHovering = false
     @State private var isPresented = false
     /// 空间不足时向上翻转（点击时按窗口剩余空间判定）。
@@ -242,10 +244,15 @@ struct DropdownPicker<Label: View>: View {
 
     /// 面板底：近实心的 windowBackgroundColor（92%）叠在 thickMaterial 上 ——
     /// 只留一点点毛玻璃质感，后面元素不透出、也点不到（纯 material 太透，实测会与背景内容混在一起）。
+    /// 简约模式：完全实心，无材质无透明。
     private var panelBackground: some View {
         RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.92))
-            .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .fill(Color(nsColor: .windowBackgroundColor).opacity(minimalMode ? 1 : 0.92))
+            .background {
+                if !minimalMode {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.thickMaterial)
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.12))
@@ -386,7 +393,7 @@ private struct DropdownPickerItem: View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark")
                 .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Theme.Palette.accent)
                 .frame(width: 12)
                 .opacity(option.checked ? 1 : 0)
             Text(option.title ?? "")

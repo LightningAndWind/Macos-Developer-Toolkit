@@ -25,14 +25,28 @@ import AppKit
 import SwiftUI
 import SwiftTerm
 
+/// 容器已套用的终端外观（明/暗 + 简约），供 updateNSView 去重。
+/// 用结构体而非元组：元组的 == 无法穿透 Optional，去重比较写不了。
+struct AppliedTerminalAppearance: Equatable {
+    var scheme: ColorScheme
+    var minimal: Bool
+
+    init(_ scheme: ColorScheme, _ minimal: Bool) {
+        self.scheme = scheme
+        self.minimal = minimal
+    }
+}
+
 enum TerminalTheme {
     /// 终端视图自身底色保持全透明：毛玻璃 tint 统一由外层终端面板（SSHToolView 卡片背景）着色，
     /// 这样内边距环与终端区是同一层底色，不会因终端自带 tint 而出现“两层边框”。
     /// 前景/光标/选区/ANSI 色板仍按 `colorScheme` 解析为具体值（避免外观反相）。
 
     /// 把终端底色/前景/光标/ANSI 调色板切到与 `colorScheme` 匹配的具体值。
+    /// `minimal == true`（简约模式）时终端底色用**不透明**窗口灰（外层面板已是实色，
+    /// 终端再透明会看到面板与终端两层同色但渲染路径不同的底，且违背「零透明」目标）。
     /// `LocalProcessTerminalView` 继承自 `TerminalView`，故两种终端共用本方法。
-    static func apply(to view: TerminalView, colorScheme: ColorScheme) {
+    static func apply(to view: TerminalView, colorScheme: ColorScheme, minimal: Bool = false) {
         // 由 colorScheme 明确构造外观，杜绝「按当前/系统外观误解析」导致的反相。
         let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
             ?? NSAppearance(named: .aqua)!
@@ -41,15 +55,16 @@ enum TerminalTheme {
         let selectedBackground = resolve(.selectedTextBackgroundColor, in: appearance)
         let opaqueWindow = resolve(.windowBackgroundColor, in: appearance)
 
-        // 终端自身透明，让后方面板材质 + tint 透出（与内边距环同色）。
-        view.nativeBackgroundColor = .clear
+        // 终端自身透明，让后方面板材质 + tint 透出（与内边距环同色）；简约模式改为不透明实色。
+        let terminalBackground: NSColor = minimal ? opaqueWindow : .clear
+        view.nativeBackgroundColor = terminalBackground
         view.nativeForegroundColor = foreground
         view.caretColor = foreground
         // 块状光标覆盖字符时，其上的文字用「不透明」窗口底色，保证与光标底色对比清晰。
         view.caretTextColor = opaqueWindow
         view.selectedTextBackgroundColor = selectedBackground
-        // layer 底也置透明，与 nativeBackgroundColor 一致。
-        view.layer?.backgroundColor = NSColor.clear.cgColor
+        // layer 底与 nativeBackgroundColor 保持一致。
+        view.layer?.backgroundColor = terminalBackground.cgColor
         // 安装随明暗切换的 ANSI 16 色板（内部会清色板缓存并触发全量重绘）。
         view.installColors(ansiPalette(for: colorScheme))
         view.needsDisplay = true

@@ -121,7 +121,7 @@ struct GitKeyManagerView: View {
         Text(text)
             .font(.system(size: 10))
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+            .background(Capsule().fill(Theme.Palette.accent.opacity(0.14)))
             .foregroundStyle(.secondary)
     }
 

@@ -74,6 +74,7 @@ final class AppState {
             openSettingsIfRequested()
             DebugSnapshot.runIfRequested(appState: self)
             SheetProbe.runIfRequested(appState: self)
+            DemoShots.runIfRequested(appState: self)
             await DebugSelfCheck.runIfRequested()
             AIAccessServer.shared.autostartIfNeeded()
             return

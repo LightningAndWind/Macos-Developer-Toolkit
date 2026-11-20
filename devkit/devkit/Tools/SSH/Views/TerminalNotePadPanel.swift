@@ -602,7 +602,7 @@ private struct TerminalNoteRow: View, Equatable {
                     .font(.system(size: 13))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Theme.Palette.accent)
             .disabled(executableBody == nil)
             .help("发送到终端并执行")
 

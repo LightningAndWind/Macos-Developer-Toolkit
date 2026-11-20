@@ -89,11 +89,11 @@ private struct GitRepoRow: View {
             chevron
             Image(systemName: rowSymbol)
                 .font(.system(size: 12))
-                .foregroundStyle(isFolder ? Color.secondary : (repoValid ? Color.accentColor : .orange))
+                .foregroundStyle(isFolder ? Color.secondary : (repoValid ? Theme.Palette.accent : .orange))
                 .frame(width: kIconWidth)
             if isFolder {
                 Text(node.name).font(.system(size: 13))
-                    .foregroundStyle(isTargetedFolder ? Color.accentColor : .primary)
+                    .foregroundStyle(isTargetedFolder ? Theme.Palette.accent : .primary)
                     .lineLimit(1)
             } else if case .repo(let r) = node.kind {
                 Text(r.alias).font(.system(size: 13)).lineLimit(1)
@@ -124,7 +124,7 @@ private struct GitRepoRow: View {
     }
 
     private var rowHighlight: Color {
-        if isSelectedRepo || isTargetedFolder { return Color.accentColor.opacity(0.16) }
+        if isSelectedRepo || isTargetedFolder { return Theme.Palette.accent.opacity(0.16) }
         return .clear
     }
 

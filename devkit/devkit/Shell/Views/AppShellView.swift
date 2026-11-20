@@ -12,6 +12,8 @@ struct AppShellView: View {
     @Environment(AppState.self) private var appState
     /// 观察明暗外观：深色下给底层材质叠一层半透黑 scrim 压暗（材质会把桌面亮度透上来，不压则偏浅灰）。
     @Environment(\.colorScheme) private var colorScheme
+    /// 简约模式：窗口底换成实心窗口灰（无模糊），其余装饰色由 Theme 令牌分支处理。
+    @Environment(\.minimalMode) private var minimalMode
 
     /// 内容区占位宽度：直接取目标档位，**不插值**。切档时内容区一次重排到位；
     /// 隐藏的常驻标签由 `ResidentTabSlot` 冻结尺寸、不参与这次重排（否则隐藏终端
@@ -69,13 +71,19 @@ struct AppShellView: View {
         .ignoresSafeArea(.container, edges: .top)
         .background {
             // 底层毛玻璃材质；深色模式在其上叠半透黑，使整体更偏黑（内容区 / 终端 / Launcher 首页随之一起变深，彼此无色差）。
-            ZStack {
-                VisualEffectBackground()
-                if colorScheme == .dark {
-                    Color.black.opacity(0.45)
+            // 简约模式不用材质：实心窗口灰，全窗口零透明零模糊。
+            if minimalMode {
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
+            } else {
+                ZStack {
+                    VisualEffectBackground()
+                    if colorScheme == .dark {
+                        Color.black.opacity(0.45)
+                    }
                 }
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
         }
         // 窗口最小尺寸：为 Git 差异/冲突预览等双栏编辑场景留出足够空间（列表 150-420 + 预览区）。1pt 误差无感知，取整数值。
         .frame(minWidth: 1000, minHeight: 640)

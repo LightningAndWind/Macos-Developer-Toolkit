@@ -191,7 +191,7 @@ struct GitChangesSection: View {
         .controlSize(.small)
         .padding(.vertical, 2).padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 5)
-            .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.03)))
+            .fill(isSelected ? Theme.Palette.accent.opacity(0.14) : Color.primary.opacity(0.03)))
         .contentShape(Rectangle())
         // 点行即打开右侧检查器预览差异/冲突（手指光标提示可点）。
         .onTapGesture { Task { await tool.selectFileForDiff(entry) } }

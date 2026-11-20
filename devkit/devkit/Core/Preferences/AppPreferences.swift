@@ -23,6 +23,10 @@ final class AppPreferences {
     /// 外观模式偏好键（跟随系统 / 浅色 / 深色）。视图侧用 `@AppStorage` 绑定，见 `AppAppearanceMode`。
     static let appearanceModeKey = "devkit.appearance.mode"
 
+    /// 简约模式偏好键（去透明 + 黑白灰，与明暗外观正交组合）。ContentView 读取后
+    /// 经 `\.minimalMode` 环境值下发；设置面板 Toggle 写入（写入前先同步 `Theme.minimalMode`）。
+    static let minimalModeKey = "devkit.appearance.minimal"
+
     /// 界面语言偏好键（跟随系统 / 简体中文 / English）。视图侧用 `@AppStorage` 绑定，见 `AppLanguageMode`。
     static let languageOverrideKey = "devkit.language.override"
 

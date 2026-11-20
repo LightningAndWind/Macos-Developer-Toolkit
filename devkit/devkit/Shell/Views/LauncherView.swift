@@ -9,6 +9,7 @@ import SwiftUI
 
 struct LauncherView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.minimalMode) private var minimalMode
     @State private var query: String = ""
 
     private var filteredDescriptors: [ToolDescriptor] {
@@ -66,7 +67,8 @@ struct LauncherView: View {
                     .font(.title3)
             }
             .padding(10)
-            .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))
+            .background(RoundedRectangle(cornerRadius: 10)
+                .fill(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial)))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
             .frame(maxWidth: 420)
             .autocorrectionDisabled()
@@ -126,6 +128,7 @@ private struct ToolCard: View {
     let descriptor: ToolDescriptor
     let compact: Bool
     let action: () -> Void
+    @Environment(\.minimalMode) private var minimalMode
 
     var body: some View {
         Button(action: action) {
@@ -136,7 +139,7 @@ private struct ToolCard: View {
                     .frame(width: 44, height: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.accentColor.opacity(0.12))
+                            .fill(Theme.Palette.accent.opacity(0.12))
                     )
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L(descriptor.title))
@@ -157,7 +160,7 @@ private struct ToolCard: View {
             .frame(maxWidth: compact ? nil : .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.regularMaterial)
+                    .fill(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12).strokeBorder(.separator.opacity(0.6))

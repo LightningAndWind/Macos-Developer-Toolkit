@@ -12,6 +12,7 @@ struct ToolPlaceholderView: View {
     let descriptor: ToolDescriptor
     let milestone: String
     let bullets: [String]
+    @Environment(\.minimalMode) private var minimalMode
 
     var body: some View {
         ScrollView {
@@ -28,7 +29,7 @@ struct ToolPlaceholderView: View {
                     Text(L(milestone))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        .background(Capsule().fill(Theme.Palette.accent.opacity(0.15)))
                         .foregroundStyle(.tint)
                 }
                 Divider()
@@ -51,6 +52,6 @@ struct ToolPlaceholderView: View {
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(.ultraThinMaterial)
+        .background(minimalMode ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial))
     }
 }

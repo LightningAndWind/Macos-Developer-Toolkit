@@ -19,6 +19,8 @@ struct RemoteSSHContainer: NSViewRepresentable {
     var inputHub: TerminalInputHub?
     /// 观察外观：明暗切换时刷新终端配色。
     @Environment(\.colorScheme) private var colorScheme
+    /// 简约模式：终端底色在不透明与透明（透出毛玻璃面板）间切换。
+    @Environment(\.minimalMode) private var minimalMode
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -26,8 +28,8 @@ struct RemoteSSHContainer: NSViewRepresentable {
         let view = LocalProcessTerminalView(frame: .zero)
         if let font = NSFont(name: "Menlo", size: 12) { view.font = font }
         view.translatesAutoresizingMaskIntoConstraints = true
-        TerminalTheme.apply(to: view, colorScheme: colorScheme)
-        context.coordinator.appliedColorScheme = colorScheme
+        TerminalTheme.apply(to: view, colorScheme: colorScheme, minimal: minimalMode)
+        context.coordinator.appliedAppearance = AppliedTerminalAppearance(colorScheme, minimalMode)
         TerminalTheme.configureScroller(in: view)
         context.coordinator.attachScrollMonitor(to: view, model: scrollModel)
         // dismantleNSView 是 static，拿不到实例属性；hub 一并寄存在 coordinator 里供其解绑。
@@ -42,12 +44,12 @@ struct RemoteSSHContainer: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        // 外观切换后重新套用配色（SwiftTerm 会烘焙颜色，需主动刷新）。
-        // 按 colorScheme 去重：apply 的 installColors 会触发终端全量重绘，
+        // 外观（明/暗）或简约模式切换后重新套用配色（SwiftTerm 会烘焙颜色，需主动刷新）。
+        // 按 (colorScheme, minimal) 去重：apply 的 installColors 会触发终端全量重绘，
         // 而 updateNSView 在宿主任意一轮重渲染都会被调用，不能重复执行。
-        guard context.coordinator.appliedColorScheme != colorScheme else { return }
-        context.coordinator.appliedColorScheme = colorScheme
-        TerminalTheme.apply(to: nsView, colorScheme: colorScheme)
+        guard context.coordinator.appliedAppearance != AppliedTerminalAppearance(colorScheme, minimalMode) else { return }
+        context.coordinator.appliedAppearance = AppliedTerminalAppearance(colorScheme, minimalMode)
+        TerminalTheme.apply(to: nsView, colorScheme: colorScheme, minimal: minimalMode)
     }
 
     /// 视图销毁时结束 ssh 进程（关标签 / 断开 / 重连换身份都会走到这里）。
@@ -90,8 +92,8 @@ struct RemoteSSHContainer: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var didStart = false
-        /// 已套用配色的外观；updateNSView 据此去重，避免重复 installColors 全量重绘。
-        var appliedColorScheme: ColorScheme?
+        /// 已套用配色（外观 + 简约模式）；updateNSView 据此去重，避免重复 installColors 全量重绘。
+        var appliedAppearance: AppliedTerminalAppearance?
         /// 记事本等外部功能的输入注入口（makeNSView 时寄存，dismantle 时解绑用）。
         var inputHub: TerminalInputHub?
         var scrollMonitor: TerminalScrollerMonitor?

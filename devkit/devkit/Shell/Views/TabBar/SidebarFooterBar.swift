@@ -106,7 +106,7 @@ struct SidebarFooterBar: View {
     }
 
     private var backgroundFill: Color {
-        if isKeepAwakeOn { return Color.accentColor.opacity(0.14) }
+        if isKeepAwakeOn { return Theme.Palette.accent.opacity(0.14) }
         return isAwakeHovering ? Theme.Palette.hoverOverlay : Color.clear
     }
 

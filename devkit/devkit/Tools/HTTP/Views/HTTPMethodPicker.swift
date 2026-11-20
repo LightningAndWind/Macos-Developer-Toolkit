@@ -31,6 +31,7 @@ struct HTTPMethodPicker: View {
     @Binding var method: String
     var presets: [HTTPMethodPreset] = HTTPMethodPreset.allCases
 
+    @Environment(\.minimalMode) private var minimalMode
     @State private var isPresented = false
     /// 按钮态 / 自定义录入态。
     @State private var isEditingMethod = false
@@ -167,7 +168,7 @@ struct HTTPMethodPicker: View {
 
     private var panelBackground: some View {
         RoundedRectangle(cornerRadius: HTTPMethodLayout.cornerRadius + 3)
-            .fill(.regularMaterial)
+            .fill(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial))
             .overlay(
                 RoundedRectangle(cornerRadius: HTTPMethodLayout.cornerRadius + 3)
                     .strokeBorder(Color.primary.opacity(0.08))

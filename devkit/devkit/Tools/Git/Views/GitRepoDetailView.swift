@@ -224,7 +224,7 @@ struct GitRepoDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.tint)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.accentColor.opacity(hovering ? 0.24 : 0.12)))
+                    .background(Capsule().fill(Theme.Palette.accent.opacity(hovering ? 0.24 : 0.12)))
                 } else {
                     HStack(spacing: 4) {
                         Label("默认密钥", systemImage: "key")
@@ -363,7 +363,7 @@ private struct SectionChip: View {
             }
             .foregroundStyle(isSelected ? Color.white : Color.primary)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(isSelected ? Color.accentColor : Color.primary.opacity(0.06)))
+            .background(Capsule().fill(isSelected ? Theme.Palette.accent : Color.primary.opacity(0.06)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

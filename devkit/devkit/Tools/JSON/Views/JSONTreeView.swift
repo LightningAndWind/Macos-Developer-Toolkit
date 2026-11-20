@@ -103,7 +103,7 @@ private struct JSONTreeRowView: View {
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 5)
-            .fill(isSelected ? Color.accentColor.opacity(0.14) : .clear))
+            .fill(isSelected ? Theme.Palette.accent.opacity(0.14) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { selectionPath = path }
         .pointingHandOnHover()

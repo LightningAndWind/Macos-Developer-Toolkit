@@ -197,7 +197,7 @@ private func primaryCard(icon: String, title: String, subtitle: String, action: 
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.accentColor.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.Palette.accent.opacity(0.10)))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Palette.accentStroke))
         .contentShape(RoundedRectangle(cornerRadius: 12))
     }

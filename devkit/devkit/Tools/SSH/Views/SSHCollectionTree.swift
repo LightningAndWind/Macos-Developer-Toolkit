@@ -74,11 +74,11 @@ private struct SSHTreeRow: View {
             chevron
             Image(systemName: iconName)
                 .font(.system(size: 12))
-                .foregroundStyle(isFolder ? Color.secondary : Color.accentColor)
+                .foregroundStyle(isFolder ? Color.secondary : Theme.Palette.accent)
                 .frame(width: kIconWidth)
             if isFolder {
                 Text(node.name).font(.system(size: 13))
-                    .foregroundStyle(isSelectedFolder ? Color.accentColor : .primary)
+                    .foregroundStyle(isSelectedFolder ? Theme.Palette.accent : .primary)
                     .lineLimit(1)
             } else if case .profile(let p) = node.kind {
                 Text(p.name).font(.system(size: 13)).lineLimit(1)
@@ -90,7 +90,7 @@ private struct SSHTreeRow: View {
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 5)
-            .fill(isSelectedFolder ? Color.accentColor.opacity(0.14) : .clear))
+            .fill(isSelectedFolder ? Theme.Palette.accent.opacity(0.14) : .clear))
         .contentShape(Rectangle())
         .onTapGesture(perform: handleTap)
         .contextMenu { rowMenu }

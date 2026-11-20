@@ -13,6 +13,7 @@ struct JSONToolView: View {
     @Bindable var tool: JSONTool
     @Environment(AppState.self) private var appState
     @Environment(\.activeToolTab) private var isActiveTab
+    @Environment(\.minimalMode) private var minimalMode
 
     /// 复制成功瞬时反馈。
     @State private var justCopied = false
@@ -31,7 +32,8 @@ struct JSONToolView: View {
             Divider()
             statusBar
         }
-        .background(.ultraThinMaterial)
+        // 简约模式无材质：窗口底已是不透明窗口灰，透出即可。
+        .background(minimalMode ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial))
         // 编辑内容后防抖落盘，保证直接退出 App 也能还原标签内容。
         .onChange(of: tool.text) { _, _ in appState.scheduleSessionSave() }
     }
@@ -214,7 +216,7 @@ struct JSONToolView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.92))
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(minimalMode ? 1 : 0.92))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.12)))
                 .shadow(color: Theme.Palette.dragShadow, radius: 10, x: 0, y: 5)
@@ -363,7 +365,7 @@ private struct SearchToggleLabel: View {
     /// 底色层级：按压最深 > 开栏选中 > 悬停 > 透明。
     private var fillColor: Color {
         if configuration.isPressed { return Color.primary.opacity(0.14) }
-        if isActive { return Color.accentColor.opacity(0.15) }
+        if isActive { return Theme.Palette.accent.opacity(0.15) }
         if isHovering { return Color.primary.opacity(0.06) }
         return .clear
     }

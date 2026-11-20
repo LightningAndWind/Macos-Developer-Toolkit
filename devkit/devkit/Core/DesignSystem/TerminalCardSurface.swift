@@ -10,8 +10,10 @@ import SwiftUI
 
 /// 终端卡片 / 记事本面板 / 右侧工具条共用的毛玻璃面板底 + 圆角裁切。
 /// 终端视图自身透明，露出此面板；tint 随明暗切换（与终端 ANSI 色板同一外观基准）。
+/// 简约模式：面板底为实心窗口灰（无材质、无 tint），终端视图亦改用实色背景（见 TerminalTheme）。
 struct TerminalCardSurface: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.minimalMode) private var minimalMode
 
     /// 是否把内容裁进圆角。默认开启（终端卡片需要裁掉方角内容）。
     /// 记事本面板内含自绘下拉弹层，弹层要溢出面板边界，需传 false —— 否则会被裁掉。
@@ -36,11 +38,17 @@ struct TerminalCardSurface: ViewModifier {
         }
     }
 
+    @ViewBuilder
     private var panelBackground: some View {
-        ZStack {
-            panelShape.fill(.ultraThinMaterial)
-            panelShape.fill(Color(nsColor: .windowBackgroundColor)
-                .opacity(colorScheme == .dark ? 0 : 0.2))
+        if minimalMode {
+            // 简约模式：实心窗口灰，不透明无模糊。
+            panelShape.fill(Color(nsColor: .windowBackgroundColor))
+        } else {
+            ZStack {
+                panelShape.fill(.ultraThinMaterial)
+                panelShape.fill(Color(nsColor: .windowBackgroundColor)
+                    .opacity(colorScheme == .dark ? 0 : 0.2))
+            }
         }
     }
 

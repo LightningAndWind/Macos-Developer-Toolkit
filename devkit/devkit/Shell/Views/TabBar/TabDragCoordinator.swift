@@ -166,6 +166,7 @@ struct TabDragPreviewView: View {
     let tab: Tab
     /// 所属分组颜色（由上层从 TabManager 解析后传入，避免预览层反向依赖）。
     var groupColor: Color?
+    @Environment(\.minimalMode) private var minimalMode
 
     private var symbolName: String {
         ToolRegistry.shared.descriptor(for: tab.toolID)?.symbolName ?? "questionmark.app"
@@ -189,7 +190,7 @@ struct TabDragPreviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Theme.Metrics.tabCornerRadius)
-                .fill(.regularMaterial)
+                .fill(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial))
         )
         .overlay(
             RoundedRectangle(cornerRadius: Theme.Metrics.tabCornerRadius)

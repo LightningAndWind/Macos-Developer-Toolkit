@@ -74,12 +74,12 @@ struct TabBarView: View {
             Image(systemName: "sidebar.leading")
                 .font(.system(size: 12, weight: .medium))
                 // 超窄模式也算一个「选中档位」，与三个宽度档位使用同一套选中高亮。
-                .foregroundStyle(sidebarCollapsed ? Color.accentColor
+                .foregroundStyle(sidebarCollapsed ? Theme.Palette.accent
                                  : (isCollapseHovering ? Color.primary : Color.secondary))
                 .frame(width: sidebarCollapsed ? 20 : 24, height: sidebarCollapsed ? 20 : 22)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(sidebarCollapsed ? Color.accentColor.opacity(0.16)
+                        .fill(sidebarCollapsed ? Theme.Palette.accent.opacity(0.16)
                               : (isCollapseHovering ? Theme.Palette.hoverOverlay : Color.clear))
                 )
                 .contentShape(Rectangle())
@@ -213,7 +213,7 @@ private struct SidebarWidthModeButton: View {
     var body: some View {
         Button(action: action) {
             SidebarWidthGlyph(mode: mode,
-                              tint: isSelected ? Color.accentColor : Color.primary)
+                              tint: isSelected ? Theme.Palette.accent : Color.primary)
                 .frame(width: isCompact ? 20 : 24, height: isCompact ? 20 : 22)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -231,7 +231,7 @@ private struct SidebarWidthModeButton: View {
     }
 
     private var background: Color {
-        if isSelected { return Color.accentColor.opacity(0.16) }
+        if isSelected { return Theme.Palette.accent.opacity(0.16) }
         if isHovering { return Theme.Palette.hoverOverlay }
         return Color.clear
     }
@@ -267,11 +267,15 @@ private struct SidebarWidthGlyph: View {
 
 // MARK: - Sidebar background
 
-/// 侧栏背景：材质。
+/// 侧栏背景：材质；简约模式下换成实心的「页面底灰」（随明暗自适应，与内容区形成黑白灰层次）。
 private struct TabBarBackground: View {
+    @Environment(\.minimalMode) private var minimalMode
+
     var body: some View {
         Rectangle()
-            .fill(.regularMaterial)
+            .fill(minimalMode
+                  ? AnyShapeStyle(Color(nsColor: .underPageBackgroundColor))
+                  : AnyShapeStyle(.regularMaterial))
     }
 }
 

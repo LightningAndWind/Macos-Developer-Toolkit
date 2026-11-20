@@ -12,6 +12,7 @@ import AppKit
 struct SFTPSidePanelView: View {
     @Bindable var state: SFTPSideState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.minimalMode) private var minimalMode
 
     @State private var pathDraft = ""
     @State private var showPicker = false
@@ -31,13 +32,19 @@ struct SFTPSidePanelView: View {
         .background {
             // 毛玻璃：底层材质提供模糊，上覆一层颜色提高不透明度。
             // 浅色模式用白纱，深色模式换成暗色（避免深色下白纱把面板提得过亮）。
-            ZStack {
+            // 简约模式：实心窗口灰，无材质无纱罩。
+            if minimalMode {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(colorScheme == .dark
-                          ? Color.black.opacity(0.22)
-                          : Color.white.opacity(0.30))
+                    .fill(Color(nsColor: .windowBackgroundColor))
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.regularMaterial)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(colorScheme == .dark
+                              ? Color.black.opacity(0.22)
+                              : Color.white.opacity(0.30))
+                }
             }
         }
         .overlay(
@@ -200,7 +207,7 @@ struct SFTPSidePanelView: View {
                 if !state.selection.isEmpty {
                     Text(String(format: L("已选 %@ 项"), String(state.selection.count)))
                         .font(.caption)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Theme.Palette.accent)
                 }
             }
             if let error = state.errorMessage {
@@ -263,7 +270,7 @@ private struct SFTPFileRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: entry.isDirectory ? "folder.fill" : "doc")
-                .foregroundStyle(entry.isDirectory ? Color.accentColor : Color.secondary)
+                .foregroundStyle(entry.isDirectory ? Theme.Palette.accent : Color.secondary)
                 .frame(width: 18)
             Text(entry.name)
                 .lineLimit(1)
@@ -288,7 +295,7 @@ private struct SFTPFileRow: View {
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.16)
+                .fill(isSelected ? Theme.Palette.accent.opacity(0.16)
                                  : (isHovering ? Theme.Palette.hoverOverlay : Color.clear))
         )
         .overlay(

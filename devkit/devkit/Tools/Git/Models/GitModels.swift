@@ -89,6 +89,12 @@ struct GitRepo: Identifiable, Hashable, Codable {
     /// 选定的「当前使用」远程名（fetch / 拉取 / 推送作用于它）；`nil` = 未选定，回落 origin 优先。
     /// 远程是仓库级配置（与分支无关），选定持久化在仓库登记上，跨分支 / 跨会话一致。
     var preferredRemoteName: String?
+    /// 该仓库是否由 MCP（AI 接入）提供：关闭后 git_list_repos 不返回它，
+    /// 且按 id / 别名直接调用 git_status / git_run 也会被当作不存在。
+    var mcpEnabled: Bool = true
+    /// 该仓库经 MCP 输出时是否脱敏：开启（默认）则本地路径按全局规则脱敏（如数据目录前缀打码）；
+    /// 关闭则 git_list_repos 原样返回本地路径。
+    var mcpRedactionEnabled: Bool = true
     var createdAt: Date = .now
     var updatedAt: Date = .now
 
@@ -101,6 +107,27 @@ struct GitRepo: Identifiable, Hashable, Codable {
     /// 展示用的目录末段名（真实文件夹名），与别名不同才补充显示。
     var directoryName: String {
         URL(fileURLWithPath: path).lastPathComponent
+    }
+}
+
+// MARK: - 兼容旧数据的解码
+
+extension GitRepo {
+    /// 自定义解码（放在扩展里，保留编译器合成的逐成员初始化器），模式对照 SSHProfile：
+    /// 后补字段 `mcpEnabled` / `mcpRedactionEnabled` 旧数据 JSON 里没有，
+    /// 走 `decodeIfPresent` 兜底默认值，避免旧登记被 `try?` 吞掉后在界面上静默消失。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
+        alias = try c.decode(String.self, forKey: .alias)
+        path = try c.decode(String.self, forKey: .path)
+        keyID = try c.decodeIfPresent(UUID.self, forKey: .keyID)
+        preferredRemoteName = try c.decodeIfPresent(String.self, forKey: .preferredRemoteName)
+        mcpEnabled = try c.decodeIfPresent(Bool.self, forKey: .mcpEnabled) ?? true
+        mcpRedactionEnabled = try c.decodeIfPresent(Bool.self, forKey: .mcpRedactionEnabled) ?? true
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
     }
 }
 

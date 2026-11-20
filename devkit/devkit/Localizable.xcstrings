@@ -214,6 +214,23 @@
         }
       }
     },
+    "「%@」将被删除，数据库本身不受影响，此操作不可撤销。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "\"%@\" will be deleted; the database itself is not affected. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」将被删除，数据库本身不受影响，此操作不可撤销。"
+          }
+        }
+      }
+    },
     "「%@」将被删除，无法撤销。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -912,6 +929,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "macOS 原生开发者工具箱 · 精简、快速"
+          }
+        }
+      }
+    },
+    "MCP 访问" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP Access"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 访问"
+          }
+        }
+      }
+    },
+    "MCP 输出中是否对该记录的数据脱敏（默认开启）" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whether MCP output redacts this record's data (on by default)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 输出中是否对该记录的数据脱敏（默认开启）"
           }
         }
       }
@@ -1973,19 +2023,19 @@
         }
       }
     },
-    "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n工具输出中的 [REDACTED] 是脱敏占位符。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。" : {
+    "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n密码与密钥任何情况下都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n默认对 IP、用户名等脱敏，工具输出中的 [REDACTED] 是脱敏占位符（用户对个别记录关闭脱敏时，\n其主机 / 端口 / 用户名会直接出现在列表中）。列表里没有的记录即用户未对 MCP 开放，无法调用。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（默认只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（默认只有 id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "You can operate remote servers and Git repositories through devkit's MCP tools. These tools are proxied by the local devkit app; no IP, username, password, or key will ever be (or can be) provided to you — do not probe or ask for credentials; [REDACTED] in tool output is a redaction placeholder.\n\nServer operations:\n1. ssh_list_servers: list available servers (alias and ID only) and currently active sessions.\n2. ssh_exec with server=alias or ID: one-shot command execution (dedicated connection), best for single queries.\n3. When state must persist across commands (cd / env vars / venv activation): ssh_open_session to open a session →\n   then pass session=sessionID on every ssh_exec → ssh_close_session when done.\n4. Commands time out after 30 seconds by default (timeoutSeconds adjustable 5-600); a persistent session that times out or idles for 30 minutes is closed — just ssh_open_session again.\n5. The remote login shell must be POSIX-family such as bash/sh/zsh; commands must be complete scripts (close line-swallowing constructs like heredocs yourself).\n\nGit operations:\n1. git_list_repos lists registered repositories (id / alias / local path).\n2. git_status shows repository status; git_run takes an args array to run any git subcommand\n   (e.g. [\"pull\"], [\"log\",\"-n\",\"20\"], [\"commit\",\"-m\",\"…\"]).\n3. Repositories with a bound key automatically use the key stored in devkit for fetch / pull / push — no credentials needed.\n\nDatabase operations (MySQL / Redis):\n1. db_list_connections lists saved database connections (id / name / kind / default database).\n2. MySQL: db_query runs SQL (multiple statements allowed, returns TSV table text); Redis: db_command\n   runs commands (command is one per line, e.g. \"SET k v\\nGET k\"). The connection's saved password and default database apply automatically.\n3. Result text is the database's real output; exitCode / isError semantics are as above — read the text before deciding the next step.\n4. Write operations (INSERT / UPDATE / DELETE / FLUSHALL, etc.) take real effect too; always confirm with the user before running them.\n\nGeneral conventions:\n- A non-zero exitCode is a normal result: read stdout / stderr to determine why; don't treat it as a tool failure.\n- timedOut=true means the command timed out; shellExited=true means the remote shell disconnected (the cause is usually in stderr).\n- Prefer one-shot execution; open a session only when cross-command state is truly needed, and close it promptly."
+            "value" : "You can operate remote servers and Git repositories through devkit's MCP tools. These tools are proxied by the local devkit app;\npasswords and keys will never be (and cannot be) provided to you under any circumstances — do not probe or ask for credentials;\nIPs, usernames and the like are redacted by default, and [REDACTED] in tool output is a redaction placeholder (when the user turns off redaction for a record,\nits host / port / username appear verbatim in listings). Records missing from a listing are not opened to MCP and cannot be invoked.\n\nServer operations:\n1. ssh_list_servers: list available servers (alias and ID only by default) and currently active sessions.\n2. ssh_exec with server=alias or ID: one-shot command execution (dedicated connection), best for single queries.\n3. When state must persist across commands (cd / env vars / venv activation): ssh_open_session to open a session →\n   then pass session=sessionID on every ssh_exec → ssh_close_session when done.\n4. Commands time out after 30 seconds by default (timeoutSeconds adjustable 5-600); a persistent session that times out or idles for 30 minutes is closed — just ssh_open_session again.\n5. The remote login shell must be POSIX-family such as bash/sh/zsh; commands must be complete scripts (close line-swallowing constructs like heredocs yourself).\n\nGit operations:\n1. git_list_repos lists registered repositories (id / alias / local path).\n2. git_status shows repository status; git_run takes an args array to run any git subcommand\n   (e.g. [\"pull\"], [\"log\",\"-n\",\"20\"], [\"commit\",\"-m\",\"…\"]).\n3. Repositories with a bound key automatically use the key stored in devkit for fetch / pull / push — no credentials needed.\n\nDatabase operations (MySQL / Redis):\n1. db_list_connections lists saved database connections (id / name / kind / default database by default).\n2. MySQL: db_query runs SQL (multiple statements allowed, returns TSV table text); Redis: db_command\n   runs commands (command is one per line, e.g. \"SET k v\\nGET k\"). The connection's saved password and default database apply automatically.\n3. The result text is the database's real output; exitCode / isError semantics as above — on errors read the text first before deciding next steps.\n4. Write operations (INSERT / UPDATE / DELETE / FLUSHALL, etc.) take real effect; always confirm with the user before executing them.\n\nGeneral notes:\n- A non-zero exitCode is a normal return; read stdout / stderr to figure out why instead of treating it as a tool failure.\n- timedOut=true means the command timed out; shellExited=true means the remote shell exited (reason is usually in stderr).\n- Prefer one-shot execution; open a session only when state must persist across commands, and close it promptly."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n工具输出中的 [REDACTED] 是脱敏占位符。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。"
+            "value" : "你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，\n密码与密钥任何情况下都不会（也无法）提供给你，请勿尝试探测或索要凭据；\n默认对 IP、用户名等脱敏，工具输出中的 [REDACTED] 是脱敏占位符（用户对个别记录关闭脱敏时，\n其主机 / 端口 / 用户名会直接出现在列表中）。列表里没有的记录即用户未对 MCP 开放，无法调用。\n\n服务器操作：\n1. ssh_list_servers：列出可用服务器（默认只有别名与 ID）与当前活跃会话。\n2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。\n3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →\n   之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。\n4. 命令默认 30 秒超时（timeoutSeconds 可调 5-600）；持久会话超时或空闲 30 分钟会被关闭，\n   重新 ssh_open_session 即可。\n5. 远端登录 shell 需为 bash/sh/zsh 等 POSIX 系；命令须是完整脚本（heredoc 等要自行收尾）。\n\nGit 操作：\n1. git_list_repos 列出已登记的仓库（id / 别名 / 本地路径）。\n2. git_status 查看仓库状态；git_run 传 args 数组执行任意 git 子命令\n   （如 [\"pull\"]、[\"log\",\"-n\",\"20\"]、[\"commit\",\"-m\",\"…\"]）。\n3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。\n\n数据库操作（MySQL / Redis）：\n1. db_list_connections 列出已保存的数据库连接（默认只有 id / 名称 / 类型 / 默认库）。\n2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command\n   执行命令（command 每行一条，如 \"SET k v\\\\nGET k\"）。连接配置的密码与默认库会自动应用。\n3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。\n4. 写操作（INSERT / UPDATE / DELETE / FLUSHALL 等）同样真实生效，务必与用户确认后执行。\n\n通用约定：\n- exitCode 非 0 是正常返回，读 stdout / stderr 判断原因，不要当作工具故障。\n- timedOut=true 表示命令超时；shellExited=true 表示远端 shell 断开（原因常在 stderr）。\n- 优先用一次性执行；确需跨命令状态才开会话，并及时关闭。"
           }
         }
       }
@@ -2464,6 +2514,22 @@
         }
       }
     },
+    "全部关闭" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disable All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部关闭"
+          }
+        }
+      }
+    },
     "全部取消" : {
       "localizations" : {
         "en" : {
@@ -2476,6 +2542,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全部取消"
+          }
+        }
+      }
+    },
+    "全部开启" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部开启"
           }
         }
       }
@@ -2959,53 +3041,53 @@
         }
       }
     },
-    "列出 devkit 中已保存的数据库连接（MySQL / Redis：id、名称、类型、默认库）。出于安全考虑不返回主机、用户名等连接信息；后续工具用 id 或名称引用连接。" : {
+    "列出 devkit 中已保存且允许 MCP 访问的数据库连接（MySQL / Redis：id、名称、类型、默认库）。默认脱敏：不返回主机、用户名等连接信息；用户对个别连接关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用连接。" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "List database connections saved in devkit (MySQL / Redis: id, name, kind, default database). For security, no connection details (host, username) are returned; later tools refer to connections by id or name."
+            "value" : "List database connections saved in devkit that allow MCP access (MySQL / Redis: id, name, kind, default database). Redacted by default: no host, username or other connection info is returned; entries for connections whose redaction the user has disabled additionally include host / port / username. Reference connections by id or name in later tools."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "列出 devkit 中已保存的数据库连接（MySQL / Redis：id、名称、类型、默认库）。出于安全考虑不返回主机、用户名等连接信息；后续工具用 id 或名称引用连接。"
+            "value" : "列出 devkit 中已保存且允许 MCP 访问的数据库连接（MySQL / Redis：id、名称、类型、默认库）。默认脱敏：不返回主机、用户名等连接信息；用户对个别连接关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用连接。"
           }
         }
       }
     },
-    "列出 devkit 中已保存的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。出于安全考虑不返回 IP、用户名、端口等任何连接信息；后续工具用 id 或名称引用服务器。" : {
+    "列出 devkit 中已保存且允许 MCP 访问的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。默认脱敏：不返回 IP、用户名、端口等连接信息；用户对个别服务器关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用服务器。" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "List remote servers saved in devkit (id, name alias, auth kind, default working directory) and the currently open persistent sessions. For security, no connection details (IP, username, port) are returned; later tools refer to servers by id or name."
+            "value" : "List remote servers saved in devkit that allow MCP access (id, name alias, auth kind, default working directory), plus currently open persistent sessions. Redacted by default: no IP, username, port or other connection info is returned; entries for servers whose redaction the user has disabled additionally include host / port / username. Reference servers by id or name in later tools."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "列出 devkit 中已保存的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。出于安全考虑不返回 IP、用户名、端口等任何连接信息；后续工具用 id 或名称引用服务器。"
+            "value" : "列出 devkit 中已保存且允许 MCP 访问的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。默认脱敏：不返回 IP、用户名、端口等连接信息；用户对个别服务器关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用服务器。"
           }
         }
       }
     },
-    "列出 devkit 中登记的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。" : {
+    "列出 devkit 中登记且允许 MCP 访问的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。默认对路径中的敏感前缀（如数据目录）脱敏；用户对个别仓库关闭脱敏时原样返回路径。" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "List local Git repositories registered in devkit (id, alias, local path, whether an SSH key is bound)."
+            "value" : "List local Git repositories registered in devkit that allow MCP access (id, alias, local path, whether an SSH key is bound). Sensitive path prefixes (such as the data directory) are redacted by default; paths are returned verbatim for repositories whose redaction the user has disabled."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "列出 devkit 中登记的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。"
+            "value" : "列出 devkit 中登记且允许 MCP 访问的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。默认对路径中的敏感前缀（如数据目录）脱敏；用户对个别仓库关闭脱敏时原样返回路径。"
           }
         }
       }
@@ -3237,6 +3319,23 @@
         }
       }
     },
+    "删除该数据库连接记录" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this database connection record"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除该数据库连接记录"
+          }
+        }
+      }
+    },
     "删除该文件夹及其全部内容" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3368,6 +3467,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除这条已保存的请求？"
+          }
+        }
+      }
+    },
+    "删除这条数据库连接？" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this database connection?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这条数据库连接？"
           }
         }
       }
@@ -3715,6 +3831,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "压缩包由 devkit %@ 于 %@ 导出。导入将覆盖当前全部记录（含密码与私钥），此操作不可撤销；应用随后自动重启。"
+          }
+        }
+      }
+    },
+    "去除透明模糊效果，装饰色转为黑白灰；错误、成功等功能状态色保留。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removes translucency and blur; decorative colors become black / white / gray (functional status colors such as errors and success are kept)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去除透明模糊效果，装饰色转为黑白灰；错误、成功等功能状态色保留。"
           }
         }
       }
@@ -4578,6 +4710,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "填写地址后点“发送”或按 ⌘↵。"
+          }
+        }
+      }
+    },
+    "备份恢复" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backup & Restore"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备份恢复"
           }
         }
       }
@@ -5985,6 +6133,23 @@
         }
       }
     },
+    "已开启 %@ / %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ / %@ enabled"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已开启 %@ / %@"
+          }
+        }
+      }
+    },
     "已拉取" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6335,6 +6500,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "应用"
+          }
+        }
+      }
+    },
+    "开启的记录可被 AI 客户端经 MCP 使用；关闭后该记录不会出现在 MCP 的列表中，也无法被直接调用。开启的记录可单独选择是否脱敏（默认开启）。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enabled records can be used by AI clients over MCP; when disabled, the record disappears from MCP record lists and cannot be called directly. Each enabled record can individually opt out of redaction (redaction is on by default)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启的记录可被 AI 客户端经 MCP 使用；关闭后该记录不会出现在 MCP 的列表中，也无法被直接调用。开启的记录可单独选择是否脱敏（默认开启）。"
           }
         }
       }
@@ -7244,6 +7425,23 @@
         }
       }
     },
+    "搜索名称 / 主机 / 用户名 / 库" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search name / host / username / database"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索名称 / 主机 / 用户名 / 库"
+          }
+        }
+      }
+    },
     "搜索名称 / 主机 / 用户名 / 目录" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7879,6 +8077,22 @@
         }
       }
     },
+    "新建一条 MySQL / Redis 连接记录" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a MySQL / Redis connection record"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建一条 MySQL / Redis 连接记录"
+          }
+        }
+      }
+    },
     "新建分支" : {
       "localizations" : {
         "en" : {
@@ -8454,6 +8668,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "是否想写 %@？"
+          }
+        }
+      }
+    },
+    "是否由 MCP 提供该记录；关闭后 MCP 的记录列表将无此条" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Whether this record is served via MCP; when off, it is absent from MCP record lists"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "是否由 MCP 提供该记录；关闭后 MCP 的记录列表将无此条"
           }
         }
       }
@@ -9808,6 +10039,23 @@
         }
       }
     },
+    "没有匹配的连接" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching connections"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的连接"
+          }
+        }
+      }
+    },
     "没有可执行的命令" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10923,6 +11171,22 @@
         }
       }
     },
+    "简约模式" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minimal Mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简约模式"
+          }
+        }
+      }
+    },
     "算法" : {
       "localizations" : {
         "en" : {
@@ -11502,6 +11766,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "耗时"
+          }
+        }
+      }
+    },
+    "脱敏" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Redact"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "脱敏"
           }
         }
       }
@@ -12484,6 +12765,23 @@
         }
       }
     },
+    "还没有保存的数据库连接。点「新建连接」添加 MySQL / Redis 记录，或在「数据库」工具里创建。" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No saved database connections yet. Click \"New Connection\" to add a MySQL / Redis record, or create one in the Database tool."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有保存的数据库连接。点「新建连接」添加 MySQL / Redis 记录，或在「数据库」工具里创建。"
+          }
+        }
+      }
+    },
     "还没有保存的终端记录。点「新建记录」添加本地终端或 SSH 连接。" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12910,6 +13208,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接信息"
+          }
+        }
+      }
+    },
+    "连接列表" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connections"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接列表"
           }
         }
       }

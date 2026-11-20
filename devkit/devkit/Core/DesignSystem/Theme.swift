@@ -8,8 +8,19 @@
 
 import SwiftUI
 
-/// 全局设计系统。按维度拆分子命名空间，纯静态、无状态。
+/// 全局设计系统。按维度拆分子命名空间，纯静态、无状态——
+/// 唯一的例外是 `minimalMode` 旗标（简约模式：去透明 + 黑白灰），
+/// 由 ContentView 在首帧前与设置面板写入时同步（见该旗标注释）。
 enum Theme {
+
+    /// 简约模式全局开关：去除一切透明 / 毛玻璃，装饰色转为黑白灰（功能状态色保留）。
+    ///
+    /// 这是调色板计算型令牌（`Palette.accent` 等）的唯一可变输入。同步点有两处，保证
+    /// 任何 body 求值时旗标已就绪：① `ContentView.init()` 首帧前直读 UserDefaults；
+    /// ② 设置面板 Toggle 的 Binding setter 里先写本旗标再写 `@AppStorage`（单次渲染内一致）。
+    /// 视图的失效依赖不走本旗标，而是各自读 `@Environment(\.minimalMode)`（环境值可穿透
+    /// `ResidentToolTab` 的 `.equatable()` 屏障，常驻标签内部的材质才能跟着切换）。
+    @MainActor static var minimalMode = false
 
     /// 尺寸与间距令牌。
     enum Metrics {
@@ -177,8 +188,15 @@ enum Theme {
         static let tabIdle = Color.primary.opacity(0.04)
         /// 悬停叠加层。
         static let hoverOverlay = Color.primary.opacity(0.06)
+        /// 强调色（选中、图标、徽标底等着色入口）：常规走系统强调色；简约模式转灰，
+        /// 使装饰性彩色整体黑白灰化。视图代码一律引用本令牌而非 `Color.accentColor`。
+        @MainActor static var accent: Color {
+            minimalMode ? Color.primary.opacity(0.55) : Color.accentColor
+        }
         /// 选中描边。
-        static let accentStroke = Color.accentColor.opacity(0.65)
+        @MainActor static var accentStroke: Color {
+            minimalMode ? Color.primary.opacity(0.5) : Color.accentColor.opacity(0.65)
+        }
         /// 滚动轨道背景：比侧栏背景稍深、比指示条稍浅，暗示可滚动范围。
         static let scrollTrack = Color.primary.opacity(0.10)
         /// 滚动指示条。
@@ -190,7 +208,9 @@ enum Theme {
         /// 侧栏底部固定条与上方标签滚动区之间的细分隔线。
         static let footerSeparator = Color.primary.opacity(0.08)
         /// 拖拽 / 悬停分割线时的高亮色，提示“此处可拖动调宽”。
-        static let splitterActive = Color.accentColor.opacity(0.75)
+        @MainActor static var splitterActive: Color {
+            minimalMode ? Color.primary.opacity(0.6) : Color.accentColor.opacity(0.75)
+        }
         /// 浮动拖拽预览的阴影。
         static let dragShadow = Color.black.opacity(0.20)
         /// 悬浮卡片（如连接横幅）的投影：轻而柔，营造浮于终端之上的层次。
@@ -211,5 +231,21 @@ enum Theme {
         static let terminalBackground = Color(nsColor: .windowBackgroundColor).opacity(0.2)
         /// 终端前景文字：与 `terminalBackground` 配对的语义正文色。
         static let terminalForeground = Color(nsColor: .labelColor)
+    }
+}
+
+// MARK: - 简约模式环境值
+
+private struct MinimalModeKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// 简约模式（去透明 + 黑白灰）：ContentView 从 `@AppStorage` 读出后向全树下发。
+    /// 走环境值而非各自直读偏好，是为了穿透 `ResidentToolTab` 的 `.equatable()` 屏障——
+    /// 读取本值的视图（工具根 / 终端容器 / 卡片面层等）会被精准失效，常驻标签内部才能同步切换。
+    var minimalMode: Bool {
+        get { self[MinimalModeKey.self] }
+        set { self[MinimalModeKey.self] = newValue }
     }
 }

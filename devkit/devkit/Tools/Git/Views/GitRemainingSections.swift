@@ -77,7 +77,7 @@ struct GitBranchSection: View {
             // 仅作当前分支的小圆点标识（非可点击控件，避免误导成复选框）。
             Image(systemName: "circle.fill")
                 .font(.system(size: 7))
-                .foregroundStyle(branch.isCurrent ? Color.accentColor : Color.clear)
+                .foregroundStyle(branch.isCurrent ? Theme.Palette.accent : Color.clear)
                 .frame(width: 12)
             Text(branch.name).font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(branch.isCurrent ? .primary : .secondary)
@@ -93,7 +93,7 @@ struct GitBranchSection: View {
         .buttonStyle(.borderless)
         .controlSize(.small)
         .padding(.vertical, 2).padding(.horizontal, 4)
-        .background(RoundedRectangle(cornerRadius: 5).fill(branch.isCurrent ? Color.accentColor.opacity(0.10) : .clear))
+        .background(RoundedRectangle(cornerRadius: 5).fill(branch.isCurrent ? Theme.Palette.accent.opacity(0.10) : .clear))
     }
 }
 

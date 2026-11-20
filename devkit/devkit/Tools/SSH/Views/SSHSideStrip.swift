@@ -47,7 +47,7 @@ struct SSHSideStripView: View {
                        height: Theme.Metrics.sideStripButtonSize)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(item.isActive ? Color.accentColor.opacity(0.16)
+                        .fill(item.isActive ? Theme.Palette.accent.opacity(0.16)
                               : (hoveringID == item.id ? Theme.Palette.hoverOverlay : Color.clear))
                 )
                 .overlay(
@@ -57,7 +57,7 @@ struct SSHSideStripView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
-        .foregroundStyle(item.isActive ? Color.accentColor : Color.secondary)
+        .foregroundStyle(item.isActive ? Theme.Palette.accent : Color.secondary)
         .onHover { hoveringID = $0 ? item.id : (hoveringID == item.id ? nil : hoveringID) }
         .help(item.help)
         .animation(Theme.Motion.micro, value: hoveringID)

@@ -11,6 +11,7 @@ import SwiftUI
 struct HTTPToolView: View {
     @Bindable var tool: HTTPTool
     @Environment(AppState.self) private var appState
+    @Environment(\.minimalMode) private var minimalMode
     @FocusState private var urlFocused: Bool
 
     /// 请求编辑区占上下可用高度的比例；拖拽分隔线调整，双击回到 0.5。以比例而非固定高度存储，
@@ -28,7 +29,8 @@ struct HTTPToolView: View {
             Divider()
             splitPanes
         }
-        .background(.ultraThinMaterial)
+        // 简约模式无材质：窗口底已是不透明窗口灰，透出即可（零透明零模糊）。
+        .background(minimalMode ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial))
         .task { tool.ensureHistoryLoaded() }
         // 编辑任意请求内容（URL/方法/Params/Headers/Body/Auth 均属 request）后防抖落盘，
         // 避免仅靠 scenePhase/退出钩子在强杀或开发重编译时丢最新状态。

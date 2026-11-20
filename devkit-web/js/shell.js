@@ -686,7 +686,7 @@ export function bootApp() {
         h('h1', { class: 'launcher-title' }, '新建标签'),
         h('p', { class: 'launcher-sub' }, '一个标签 = 一个工具实例，可以并行工作'),
         h('div', { class: 'launcher-search' }, icon('search', 15), searchInput),
-        h(
+          h(
           'div',
           { class: 'launcher-foot' },
           h('span', { class: 'kbd' }, `${modKey()}T`),
@@ -696,7 +696,19 @@ export function bootApp() {
           h('span', null, '数据只保存在本机浏览器')
         )
       ),
-      gridHost
+      gridHost,
+      // ICP 备案信息（工信部要求展示在网站首页底部）
+      h(
+        'footer',
+        { class: 'launcher-icp' },
+        h(
+          'a',
+          { href: 'https://beian.miit.gov.cn/', target: '_blank', rel: 'noopener noreferrer' },
+          '豫ICP备2026058766号'
+        ),
+        h('span', { style: { opacity: '0.45', margin: '0 6px' } }, '·'),
+        h('span', null, '2026')
+      )
     );
 
     els.launcher.append(inner);

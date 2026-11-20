@@ -612,6 +612,30 @@ body.is-resizing {
   padding-top: 6px;
 }
 
+/* — ICP 备案（首页底部） — */
+
+.launcher-icp {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: -10px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.launcher-icp a {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 3px;
+}
+
+.launcher-icp a:hover {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* — 弹层 / 菜单 / 提示 — */
 
 .overlay {

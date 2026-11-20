@@ -2,12 +2,13 @@
 //  SettingsView.swift
 //  devkit
 //
-//  设置面板：集中管理 HTTP 记录与终端会话记录（新增 / 删除），另含数据目录管理
-//  （迁移到新目录 / 恢复默认 / 配置压缩包导出导入）。
+//  设置面板：集中管理 HTTP 记录 / 终端会话 / Git 仓库 / 数据库连接（新增 / 编辑 / 删除），
+//  各记录分区带「MCP 访问」控制（按记录开关是否由 MCP 提供、是否脱敏，支持全部开启 / 关闭）；
+//  通用分区含数据目录管理（迁移 / 恢复默认）与备份恢复（配置压缩包导出 / 导入）。
 //  入口：侧栏左下角设置按钮、菜单「设置…」(⌘,)。
 //
 //  设计说明：
-//  - 左侧为分区导轨（HTTP 记录 / 终端会话 / Git 仓库 / 通用），右侧为对应列表，仿系统设置的观感；
+//  - 左侧为分区导轨（HTTP 记录 / 终端会话 / Git 仓库 / 数据库 / AI 接入 / 通用），右侧为对应列表，仿系统设置的观感；
 //  - 「已保存请求 / 终端会话记录」为用户资产，删除前弹确认；「历史记录」为过程数据，删除即时生效；
 //  - 删除会同步刷新已打开标签内缓存的列表 / 绑定，避免出现「设置里删了但标签里还在」。
 //
@@ -21,6 +22,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
     case http
     case ssh
     case git
+    case db
     case ai
     case general
 
@@ -31,6 +33,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .http: return "HTTP 记录"
         case .ssh: return "终端会话"
         case .git: return "Git 仓库"
+        case .db: return "数据库"
         case .ai: return "AI 接入"
         case .general: return "通用"
         }
@@ -41,6 +44,7 @@ enum SettingsPanelSection: String, CaseIterable, Identifiable {
         case .http: return "arrow.up.arrow.down.square"
         case .ssh: return "terminal"
         case .git: return "arrow.triangle.branch"
+        case .db: return "cylinder"
         case .ai: return "sparkles"
         case .general: return "gearshape"
         }
@@ -70,6 +74,11 @@ struct SettingsView: View {
     @AppStorage(AppPreferences.languageOverrideKey)
     private var languageRaw: String = AppLanguageMode.system.rawValue
 
+    /// 简约模式（去透明 + 黑白灰）：与根视图 `ContentView` 共享同一键。
+    /// 写入走自定义 Binding——先同步 `Theme.minimalMode` 旗标再落存储，保证同一轮渲染内调色板令牌一致。
+    @AppStorage(AppPreferences.minimalModeKey)
+    private var minimalMode = false
+
     /// 语言变更后置位：显示「需重启生效」提示与「立即重启」按钮（本次会话内 UI 语言不变）。
     @State private var showLanguageRestartHint = false
 
@@ -93,6 +102,12 @@ struct SettingsView: View {
     @State private var gitKeys: [GitKey] = []
     /// 正展开「改绑密钥」下拉的仓库行：滚动列表内后续行 z 序更高会盖住面板，展开行须抬升。
     @State private var openKeyMenuRepoID: UUID?
+
+    // 数据库连接（与 DB 工具共用同一 store；此分区集中管理增删改与 MCP 可见性）。
+    @State private var dbConnections: [DBConnection] = []
+    @State private var dbQuery = ""
+    @State private var editingDBConnection: DBConnection?
+    @State private var editingDBConnectionIsNew = false
 
     // 集合树（无搜索词时展示层级）；搜索时退回下方扁平过滤列表。
     @State private var httpTree: [SettingsTreeNode] = []
@@ -145,6 +160,11 @@ struct SettingsView: View {
             SSHProfileEditorView(draft: profile, isNew: editingProfileIsNew) { saved, connect in
                 refresh()
                 if connect { openInNewTab(saved) }
+            }
+        }
+        .sheet(item: $editingDBConnection) { connection in
+            DBConnectionEditorView(draft: connection, isNew: editingDBConnectionIsNew) {
+                refresh()
             }
         }
         .confirmationDialog(
@@ -268,13 +288,13 @@ struct SettingsView: View {
                 Text(L(item.title)).font(.system(size: 12.5))
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+            .foregroundStyle(isSelected ? Theme.Palette.accent : Color.primary)
             .padding(.horizontal, 8)
             .frame(height: 28)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .fill(isSelected ? Theme.Palette.accent.opacity(0.12) : Color.clear)
             )
             .contentShape(RoundedRectangle(cornerRadius: 6))
         }
@@ -287,6 +307,7 @@ struct SettingsView: View {
         case .http: httpPane
         case .ssh: sshPane
         case .git: gitPane
+        case .db: dbPane
         case .ai: aiPane
         case .general: generalPane
         }
@@ -415,6 +436,12 @@ struct SettingsView: View {
                 .help("新建本地终端记录或远程 SSH 连接")
             }
 
+            mcpAccessBlock(
+                enabledCount: remoteProfilesMCPEnabledCount,
+                totalCount: remoteProfilesCount,
+                onAllOn: { setAllProfileMCP(true) },
+                onAllOff: { setAllProfileMCP(false) })
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
@@ -437,7 +464,10 @@ struct SettingsView: View {
                                     subtitle: "\(profile.displaySummary) · \(folderName(for: profile))",
                                     deleteHelp: L("删除该记录（含其私钥文件）"),
                                     onDelete: { pendingDeletion = .sshProfile(id: profile.id, name: profile.name) },
-                                    onEdit: { beginEditProfile(profile.id) }
+                                    onEdit: { beginEditProfile(profile.id) },
+                                    mcp: profileMCPValue(profile),
+                                    onToggleMCPAccess: { on in toggleProfileMCP(profile.id, access: on) },
+                                    onToggleMCPRedaction: { on in toggleProfileMCP(profile.id, redaction: on) }
                                 )
                             }
                         }
@@ -453,7 +483,10 @@ struct SettingsView: View {
                                 refresh()
                             },
                             // 终端会话记录可就地编辑（名称 / 默认目录 / 主机 / 认证等）。
-                            onEditRecord: { node in beginEditProfile(node.id) }
+                            onEditRecord: { node in beginEditProfile(node.id) },
+                            // 远程记录带行内 MCP 访问 / 脱敏开关（本地终端不经 MCP 暴露）。
+                            onToggleRecordMCP: { node, on in toggleProfileMCP(node.id, access: on) },
+                            onToggleRecordRedaction: { node, on in toggleProfileMCP(node.id, redaction: on) }
                         )
                     }
                 }
@@ -486,6 +519,18 @@ struct SettingsView: View {
                 .labelsHidden()
                 .fixedSize()
                 Text("选择应用亮色 / 暗色主题；终端、侧栏与内容区会同步切换。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("简约模式", isOn: Binding(
+                    get: { minimalMode },
+                    set: { on in
+                        // 先同步调色板旗标再写存储：让本轮重渲染取到的令牌已是新模式。
+                        Theme.minimalMode = on
+                        minimalMode = on
+                    }
+                ))
+                .font(.system(size: 12.5))
+                Text("去除透明模糊效果，装饰色转为黑白灰；错误、成功等功能状态色保留。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -535,8 +580,8 @@ struct SettingsView: View {
                         .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.14)))
-                        .foregroundStyle(Color.accentColor)
+                        .background(Capsule().fill(Theme.Palette.accent.opacity(0.14)))
+                        .foregroundStyle(Theme.Palette.accent)
                 }
                 HStack(spacing: 8) {
                     Button("在访达中显示") { revealDataDirectory() }
@@ -546,6 +591,11 @@ struct SettingsView: View {
                     }
                 }
                 .controlSize(.small)
+            }
+
+            // 备份恢复：整份配置（数据库 + 密钥）的导出 / 导入，与「数据目录」平级的独立块。
+            VStack(alignment: .leading, spacing: 6) {
+                Text("备份恢复").font(.system(size: 12, weight: .semibold))
                 HStack(spacing: 8) {
                     Button("导出配置压缩包…") { exportArchive() }
                     Button("导入配置压缩包…") { chooseImportArchive() }
@@ -680,6 +730,12 @@ struct SettingsView: View {
                 Spacer(minLength: 0)
             }
 
+            mcpAccessBlock(
+                enabledCount: gitRepos.filter(\.mcpEnabled).count,
+                totalCount: gitRepos.count,
+                onAllOn: { setAllRepoMCP(true) },
+                onAllOff: { setAllRepoMCP(false) })
+
             if gitRepos.isEmpty {
                 emptyHint(L("还没有登记任何 Git 仓库。打开“Git 管理”工具→选择器→登记 / 克隆。"))
                 Spacer(minLength: 0)
@@ -701,7 +757,7 @@ struct SettingsView: View {
     private func gitRepoRow(_ repo: GitRepo) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "arrow.triangle.branch")
-                .foregroundStyle(repo.isValid ? Color.accentColor : .orange)
+                .foregroundStyle(repo.isValid ? Theme.Palette.accent : .orange)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
                 Text(repo.alias).font(.system(size: 12, weight: .semibold))
@@ -713,6 +769,12 @@ struct SettingsView: View {
                 }
             }
             Spacer(minLength: 8)
+            // 行内 MCP 访问 / 脱敏开关（照三处记录分区的统一形态）。
+            SettingsMCPToggleGroup(
+                accessEnabled: repo.mcpEnabled,
+                redactionEnabled: repo.mcpRedactionEnabled,
+                onAccess: { on in toggleRepoMCP(repo.id, access: on) },
+                onRedaction: { on in toggleRepoMCP(repo.id, redaction: on) })
             // 改绑密钥（仅换密钥，与新增仓库不同）。滚动列表内下拉面板溢出本行，
             // 后续行会盖住面板：展开的行用 zIndex 抬升（见 openKeyMenuRepoID）。
             DropdownPicker(
@@ -767,6 +829,98 @@ struct SettingsView: View {
         refresh()
     }
 
+    // MARK: - 数据库分区
+
+    /// 数据库连接扁平列表（无文件夹层级），与 DB 工具内共用同一 store，两处增删改互通。
+    private var dbPane: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                searchField(text: $dbQuery, placeholder: L("搜索名称 / 主机 / 用户名 / 库"))
+                Button { newDBConnection() } label: {
+                    Label("新建连接", systemImage: "plus")
+                }
+                .controlSize(.small)
+                .help("新建一条 MySQL / Redis 连接记录")
+            }
+
+            mcpAccessBlock(
+                enabledCount: dbConnections.filter(\.mcpEnabled).count,
+                totalCount: dbConnections.count,
+                onAllOn: { setAllDBConnectionMCP(true) },
+                onAllOff: { setAllDBConnectionMCP(false) })
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text("连接列表").font(.system(size: 12, weight: .semibold))
+                        countBadge(filteredDBConnections.count)
+                        Spacer(minLength: 0)
+                    }
+
+                    if dbConnections.isEmpty {
+                        emptyHint(L("还没有保存的数据库连接。点「新建连接」添加 MySQL / Redis 记录，或在「数据库」工具里创建。"))
+                    } else if filteredDBConnections.isEmpty {
+                        emptyHint(L("没有匹配的连接"))
+                    } else {
+                        ForEach(filteredDBConnections) { connection in
+                            dbConnectionRow(connection)
+                        }
+                    }
+                }
+                .padding(.trailing, 2)
+                .padding(.bottom, 4)
+            }
+        }
+        .padding(20)
+    }
+
+    /// 连接行：类型徽标 + 名称 + `host:port · 默认库`，行内编辑 / 删除 / MCP 开关。
+    private func dbConnectionRow(_ connection: DBConnection) -> some View {
+        SettingsRecordRow(
+            badge: connection.kind.label,
+            badgeColor: connection.kind == .mysql ? .accentColor : .orange,
+            title: connection.name,
+            subtitle: dbConnectionSubtitle(connection),
+            deleteHelp: L("删除该数据库连接记录"),
+            onDelete: { pendingDeletion = .dbConnection(id: connection.id, name: connection.name) },
+            onEdit: { beginEditDBConnection(connection.id) },
+            mcp: SettingsMCPToggleValue(accessEnabled: connection.mcpEnabled,
+                                        redactionEnabled: connection.mcpRedactionEnabled),
+            onToggleMCPAccess: { on in toggleDBConnectionMCP(connection.id, access: on) },
+            onToggleMCPRedaction: { on in toggleDBConnectionMCP(connection.id, redaction: on) }
+        )
+    }
+
+    private func dbConnectionSubtitle(_ connection: DBConnection) -> String {
+        var parts = ["\(connection.host):\(String(connection.port))"]
+        if let database = connection.normalizedDatabase { parts.append(database) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var filteredDBConnections: [DBConnection] {
+        let q = dbQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return dbConnections }
+        return dbConnections.filter {
+            $0.name.lowercased().contains(q)
+                || $0.host.lowercased().contains(q)
+                || ($0.normalizedUsername ?? "").lowercased().contains(q)
+                || ($0.normalizedDatabase ?? "").lowercased().contains(q)
+        }
+    }
+
+    /// 编辑一条连接：从库里读回整条（以 blob 为准）后交给编辑器。
+    private func beginEditDBConnection(_ id: UUID) {
+        guard let connection = DBConnectionStore.load(id: id) else { return }
+        editingDBConnectionIsNew = false
+        editingDBConnection = connection
+    }
+
+    /// 新建连接 = 打开连接编辑器（默认 MySQL 起草，可切成 Redis）；保存后列表就地刷新。
+    private func newDBConnection() {
+        editingDBConnectionIsNew = true
+        editingDBConnection = DBConnection(name: "")
+    }
+
     // MARK: - 数据
 
     private func refresh() {
@@ -777,6 +931,7 @@ struct SettingsView: View {
         folderNames = Dictionary(uniqueKeysWithValues: SSHProfileStore.allFolders().map { ($0.id, $0.name) })
         gitRepos = GitRepoStore.allRepos()
         gitKeys = GitKeyStore.all()
+        dbConnections = DBConnectionStore.all()
         httpTree = Self.buildHTTPTree()
         httpMoveTargets = Self.buildMoveTargets(HTTPCollectionStore.allFolders().map { ($0.id, $0.parentID, $0.name) })
         sshTree = Self.buildSSHTree()
@@ -815,6 +970,7 @@ struct SettingsView: View {
                                         children: (node.children ?? []).map(map))
             case .profile(let p):
                 // 层级已由树体现，副标题只留摘要（不再重复文件夹名）；本地记录用 house 图标区分。
+                // 远程记录附带 MCP 开关状态（本地终端不经 MCP 暴露，不附）。
                 return SettingsTreeNode(id: p.id,
                                         kind: .record(title: p.name,
                                                       subtitle: p.displaySummary,
@@ -822,7 +978,10 @@ struct SettingsView: View {
                                                       badgeColor: nil,
                                                       symbol: p.isLocal ? "house" : "terminal",
                                                       symbolColor: .accentColor),
-                                        children: nil)
+                                        children: nil,
+                                        mcp: p.isLocal ? nil
+                                            : SettingsMCPToggleValue(accessEnabled: p.mcpEnabled,
+                                                                     redactionEnabled: p.mcpRedactionEnabled))
             }
         }
         return SSHProfileStore.buildTree().map(map)
@@ -887,6 +1046,100 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - 动作：MCP 访问 / 脱敏
+
+    /// 远程记录数（MCP 访问统计口径：本地终端不经 MCP 暴露，不计入）。
+    private var remoteProfilesCount: Int { profiles.filter(\.isRemote).count }
+    private var remoteProfilesMCPEnabledCount: Int { profiles.filter { $0.isRemote && $0.mcpEnabled }.count }
+
+    /// 行内开关用的取值：远程记录带值，本地记录返回 nil（不显示开关）。
+    private func profileMCPValue(_ profile: SSHProfile) -> SettingsMCPToggleValue? {
+        guard profile.isRemote else { return nil }
+        return SettingsMCPToggleValue(accessEnabled: profile.mcpEnabled,
+                                      redactionEnabled: profile.mcpRedactionEnabled)
+    }
+
+    /// 改单条终端记录的 MCP 可见性 / 脱敏开关（从库里读回整条改写，改完就地刷新）。
+    private func toggleProfileMCP(_ id: UUID, access: Bool? = nil, redaction: Bool? = nil) {
+        guard var profile = SSHProfileStore.load(id: id) else { return }
+        if let access { profile.mcpEnabled = access }
+        if let redaction { profile.mcpRedactionEnabled = redaction }
+        try? SSHProfileStore.save(profile)
+        refresh()
+    }
+
+    /// 终端会话的「全部开启 / 全部关闭」：只动远程记录的访问开关，脱敏保持各自现状。
+    private func setAllProfileMCP(_ on: Bool) {
+        for profile in profiles where profile.isRemote && profile.mcpEnabled != on {
+            var updated = profile
+            updated.mcpEnabled = on
+            try? SSHProfileStore.save(updated)
+        }
+        refresh()
+    }
+
+    private func toggleRepoMCP(_ id: UUID, access: Bool? = nil, redaction: Bool? = nil) {
+        guard var repo = GitRepoStore.load(id: id) else { return }
+        if let access { repo.mcpEnabled = access }
+        if let redaction { repo.mcpRedactionEnabled = redaction }
+        try? GitRepoStore.save(repo)
+        refresh()
+    }
+
+    private func setAllRepoMCP(_ on: Bool) {
+        for repo in gitRepos where repo.mcpEnabled != on {
+            var updated = repo
+            updated.mcpEnabled = on
+            try? GitRepoStore.save(updated)
+        }
+        refresh()
+    }
+
+    private func toggleDBConnectionMCP(_ id: UUID, access: Bool? = nil, redaction: Bool? = nil) {
+        guard var connection = DBConnectionStore.load(id: id) else { return }
+        if let access { connection.mcpEnabled = access }
+        if let redaction { connection.mcpRedactionEnabled = redaction }
+        try? DBConnectionStore.save(connection)
+        refresh()
+    }
+
+    private func setAllDBConnectionMCP(_ on: Bool) {
+        for connection in dbConnections where connection.mcpEnabled != on {
+            var updated = connection
+            updated.mcpEnabled = on
+            try? DBConnectionStore.save(updated)
+        }
+        refresh()
+    }
+
+    /// 三个记录分区共用的「MCP 访问」控制块：全部开启 / 全部关闭 + 已开启计数 + 说明。
+    private func mcpAccessBlock(enabledCount: Int, totalCount: Int,
+                                onAllOn: @escaping () -> Void,
+                                onAllOff: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("MCP 访问").font(.system(size: 12, weight: .semibold))
+                Text(String(format: L("已开启 %@ / %@"), String(enabledCount), String(totalCount)))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button("全部开启", action: onAllOn)
+                    .disabled(totalCount == 0 || enabledCount == totalCount)
+                Button("全部关闭", action: onAllOff)
+                    .disabled(totalCount == 0 || enabledCount == 0)
+            }
+            .controlSize(.small)
+            Text("开启的记录可被 AI 客户端经 MCP 使用；关闭后该记录不会出现在 MCP 的列表中，也无法被直接调用。开启的记录可单独选择是否脱敏（默认开启）。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.03)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator.opacity(0.5)))
+    }
+
     // MARK: - 动作：删除
 
     private func performDeletion(_ item: PendingDeletion) {
@@ -900,6 +1153,9 @@ struct SettingsView: View {
         case .gitRepo(let id, _):
             // 仅移除登记 + 解绑已打开的 Git 标签（不动磁盘与密钥）。
             appState.deleteGitRepo(id)
+        case .dbConnection(let id, _):
+            // 仅移除连接记录；已打开的数据库工具标签若正用该连接，查询会在下次执行时报错。
+            DBConnectionStore.delete(id)
         case .httpFolder(let id, _):
             appState.deleteHTTPFolder(id: id)
         case .sshFolder(let id, _):
@@ -1121,13 +1377,14 @@ private enum PendingDeletion: Identifiable {
     case savedRequest(id: UUID, name: String)
     case sshProfile(id: UUID, name: String)
     case gitRepo(id: UUID, name: String)
+    case dbConnection(id: UUID, name: String)
     case httpFolder(id: UUID, name: String)
     case sshFolder(id: UUID, name: String)
 
     var id: UUID {
         switch self {
         case .savedRequest(let i, _), .sshProfile(let i, _), .gitRepo(let i, _),
-             .httpFolder(let i, _), .sshFolder(let i, _):
+             .dbConnection(let i, _), .httpFolder(let i, _), .sshFolder(let i, _):
             return i
         }
     }
@@ -1137,6 +1394,7 @@ private enum PendingDeletion: Identifiable {
         case .savedRequest: return L("删除这条已保存的请求？")
         case .sshProfile: return L("删除这条终端记录？")
         case .gitRepo: return L("删除这个仓库登记？")
+        case .dbConnection: return L("删除这条数据库连接？")
         case .httpFolder, .sshFolder: return L("删除这个文件夹？")
         }
     }
@@ -1149,6 +1407,8 @@ private enum PendingDeletion: Identifiable {
             return String(format: L("「%@」及其私钥文件将被删除，此操作不可撤销。"), String(n))
         case .gitRepo(_, let n):
             return String(format: L("仅移除「%@」的登记，磁盘上的仓库工作目录与已绑定密钥不会被删除。"), String(n))
+        case .dbConnection(_, let n):
+            return String(format: L("「%@」将被删除，数据库本身不受影响，此操作不可撤销。"), String(n))
         case .httpFolder(_, let n):
             return String(format: L("「%@」及其内部的全部文件夹与请求将被一并删除，此操作不可撤销。"), String(n))
         case .sshFolder(_, let n):
@@ -1174,6 +1434,10 @@ struct SettingsRecordRow: View {
     let onDelete: () -> Void
     /// 可选的就地编辑入口；`nil` 时（如 HTTP 记录）不显示铅笔按钮。
     var onEdit: (() -> Void)? = nil
+    /// 可选的行内「MCP 访问 / 脱敏」开关；`nil` 时（如 HTTP 记录）不显示开关组。
+    var mcp: SettingsMCPToggleValue? = nil
+    var onToggleMCPAccess: ((Bool) -> Void)? = nil
+    var onToggleMCPRedaction: ((Bool) -> Void)? = nil
 
     @State private var isHovering = false
 
@@ -1205,6 +1469,14 @@ struct SettingsRecordRow: View {
                 }
             }
             Spacer(minLength: 8)
+            if let mcp {
+                SettingsMCPToggleGroup(
+                    accessEnabled: mcp.accessEnabled,
+                    redactionEnabled: mcp.redactionEnabled,
+                    onAccess: { on in onToggleMCPAccess?(on) },
+                    onRedaction: { on in onToggleMCPRedaction?(on) }
+                )
+            }
             if let onEdit {
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
@@ -1238,6 +1510,32 @@ struct SettingsRecordRow: View {
     }
 }
 
+/// 行内「MCP 访问 / 脱敏」开关组：两个 checkbox，脱敏开关仅在访问开启时显示。
+/// 设置面板三个记录分区（终端会话 / Git 仓库 / 数据库）的扁平行与树行共用。
+struct SettingsMCPToggleGroup: View {
+    let accessEnabled: Bool
+    let redactionEnabled: Bool
+    let onAccess: (Bool) -> Void
+    let onRedaction: (Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Toggle(L("MCP"), isOn: Binding(get: { accessEnabled }, set: onAccess))
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .font(.system(size: 11))
+                .help(L("是否由 MCP 提供该记录；关闭后 MCP 的记录列表将无此条"))
+            if accessEnabled {
+                Toggle(L("脱敏"), isOn: Binding(get: { redactionEnabled }, set: onRedaction))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .font(.system(size: 11))
+                    .help(L("MCP 输出中是否对该记录的数据脱敏（默认开启）"))
+            }
+        }
+    }
+}
+
 #Preview {
     SettingsView()
         .environment(AppState.shared)
@@ -1254,11 +1552,12 @@ extension SettingsView {
     private var aiUsagePrompt: String {
         L("""
         你可以通过 devkit 的 MCP 工具操作远程服务器与 Git 仓库。这些工具由本机 devkit 应用代理执行，
-        任何 IP、用户名、密码、密钥都不会（也无法）提供给你，请勿尝试探测或索要凭据；
-        工具输出中的 [REDACTED] 是脱敏占位符。
+        密码与密钥任何情况下都不会（也无法）提供给你，请勿尝试探测或索要凭据；
+        默认对 IP、用户名等脱敏，工具输出中的 [REDACTED] 是脱敏占位符（用户对个别记录关闭脱敏时，
+        其主机 / 端口 / 用户名会直接出现在列表中）。列表里没有的记录即用户未对 MCP 开放，无法调用。
 
         服务器操作：
-        1. ssh_list_servers：列出可用服务器（只有别名与 ID）与当前活跃会话。
+        1. ssh_list_servers：列出可用服务器（默认只有别名与 ID）与当前活跃会话。
         2. ssh_exec 传 server=别名或ID：一次性执行命令（独立连接），适合单次查询。
         3. 需要跨命令保持状态（cd / 环境变量 / venv 激活）时：ssh_open_session 打开会话 →
            之后每次 ssh_exec 传 session=会话ID → 用完 ssh_close_session。
@@ -1273,7 +1572,7 @@ extension SettingsView {
         3. 绑定了密钥的仓库，fetch / pull / push 自动用 devkit 内保存的密钥认证，无需任何凭据。
 
         数据库操作（MySQL / Redis）：
-        1. db_list_connections 列出已保存的数据库连接（id / 名称 / 类型 / 默认库）。
+        1. db_list_connections 列出已保存的数据库连接（默认只有 id / 名称 / 类型 / 默认库）。
         2. MySQL 用 db_query 执行 SQL（可多语句，返回 TSV 表格文本）；Redis 用 db_command
            执行命令（command 每行一条，如 "SET k v\\nGET k"）。连接配置的密码与默认库会自动应用。
         3. 结果文本就是数据库的真实输出；exitCode / isError 语义同上，错误先读文本再决定下一步。

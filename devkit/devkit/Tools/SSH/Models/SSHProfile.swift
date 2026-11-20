@@ -42,7 +42,8 @@ struct SSHFolder: Identifiable, Hashable, Codable {
 ///
 /// 迁移说明：`kind` 与 `workingDirectory` 是后补字段，旧数据 JSON 里没有这两个键。
 /// 若交给合成解码，会因 `keyNotFound` 抛错、被 `try?` 吞掉 → 旧记录在界面上静默消失。
-/// 故此处自定义 `init(from:)`（见文件末尾扩展），对这两个字段走 `decodeIfPresent`。
+/// 故此处自定义 `init(from:)`（见文件末尾扩展），对这两个字段（及后续后补的
+/// `jumpProfileID` / `mcpEnabled` / `mcpRedactionEnabled`）走 `decodeIfPresent`。
 struct SSHProfile: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     /// 所属文件夹；`nil` = 根。
@@ -68,6 +69,13 @@ struct SSHProfile: Identifiable, Hashable, Codable {
     /// 跳板机：先连接该记录所指主机，再经由它转发到本机（`nil` = 直连）。
     /// 仅允许引用「自身不经过跳板」的远程记录（单跳，防环）；目标不可达、本机可达跳板的场景用它。
     var jumpProfileID: UUID?
+    /// 该记录是否由 MCP（AI 接入）提供：关闭后 ssh_list_servers 不返回它，
+    /// 且按 id / 名称直接调用也会被当作不存在。仅对远程记录有意义（本地终端不经 MCP 暴露）。
+    var mcpEnabled: Bool = true
+    /// 该记录经 MCP 输出时是否脱敏：开启（默认）则 host / 用户名等进入脱敏集合、列表不返回连接信息；
+    /// 关闭则列表额外返回 host / 端口 / 用户名，且这些值可出现在其它 MCP 输出中。
+    /// 密码 / 私钥口令 / 私钥路径与脱敏开关无关，永不输出。
+    var mcpRedactionEnabled: Bool = true
     var createdAt: Date = .now
     var updatedAt: Date = .now
 
@@ -133,7 +141,8 @@ struct SSHProfile: Identifiable, Hashable, Codable {
 
 extension SSHProfile {
     /// 自定义解码（放在扩展里，保留编译器合成的逐成员初始化器）。
-    /// 后补字段 `kind` / `workingDirectory` / `jumpProfileID` 用 `decodeIfPresent` 兜底，其余字段维持严格解码。
+    /// 后补字段 `kind` / `workingDirectory` / `jumpProfileID` / `mcpEnabled` / `mcpRedactionEnabled`
+    /// 用 `decodeIfPresent` 兜底，其余字段维持严格解码。
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -149,6 +158,8 @@ extension SSHProfile {
         privateKeyFileName = try c.decodeIfPresent(String.self, forKey: .privateKeyFileName)
         keyPassphrase = try c.decodeIfPresent(String.self, forKey: .keyPassphrase)
         jumpProfileID = try c.decodeIfPresent(UUID.self, forKey: .jumpProfileID)
+        mcpEnabled = try c.decodeIfPresent(Bool.self, forKey: .mcpEnabled) ?? true
+        mcpRedactionEnabled = try c.decodeIfPresent(Bool.self, forKey: .mcpRedactionEnabled) ?? true
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
     }

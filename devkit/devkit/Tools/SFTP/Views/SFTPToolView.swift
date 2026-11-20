@@ -36,6 +36,7 @@ struct SFTPToolView: View {
 private struct SFTPTransferColumn: View {
     let tool: SFTPTool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.minimalMode) private var minimalMode
 
     var body: some View {
         VStack(spacing: 8) {
@@ -66,15 +67,23 @@ private struct SFTPTransferColumn: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(enabled ? Color.accentColor : Color.secondary.opacity(0.5))
+        .foregroundStyle(enabled ? Theme.Palette.accent : Color.secondary.opacity(0.5))
         .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(colorScheme == .dark
-                          ? Color.black.opacity(0.22)
-                          : Color.white.opacity(0.30))
+            // 简约模式：实心窗口灰，无材质无纱罩。
+            Group {
+                if minimalMode {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color(nsColor: .windowBackgroundColor))
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(.regularMaterial)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(colorScheme == .dark
+                                  ? Color.black.opacity(0.22)
+                                  : Color.white.opacity(0.30))
+                    }
+                }
             }
             .opacity(enabled ? 1 : 0.55)
         }
@@ -92,6 +101,7 @@ private struct SFTPTransferColumn: View {
 private struct TransferHud: View {
     let tool: SFTPTool
     let state: SFTPTool.TransferState
+    @Environment(\.minimalMode) private var minimalMode
 
     private static let bytes: ByteCountFormatter = {
         let f = ByteCountFormatter()
@@ -139,7 +149,7 @@ private struct TransferHud: View {
         }
         .padding(12)
         .frame(minWidth: 320)
-        .background(.ultraThinMaterial,
+        .background(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.ultraThinMaterial),
                     in: RoundedRectangle(cornerRadius: Theme.Metrics.bannerCornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.Metrics.bannerCornerRadius, style: .continuous)

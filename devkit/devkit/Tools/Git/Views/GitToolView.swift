@@ -80,6 +80,7 @@ private struct GitToast: View {
     let text: String
     let color: Color
     let symbol: String
+    @Environment(\.minimalMode) private var minimalMode
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: symbol).foregroundStyle(color)
@@ -90,7 +91,7 @@ private struct GitToast: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 7)
         .frame(maxWidth: 520)
-        .background(Capsule().fill(.regularMaterial))
+        .background(Capsule().fill(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.regularMaterial)))
         .overlay(Capsule().strokeBorder(color.opacity(0.35)))
         .shadow(color: Theme.Palette.floatingShadow, radius: 6, y: 2)
     }

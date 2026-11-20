@@ -3,8 +3,11 @@
 //  devkit
 //
 //  AI 接入的脱敏层：把「不应进入模型上下文」的字符串从一切出站文本中擦除。
-//  覆盖范围 = 全部 SSH 记录的 host / 用户名 / 密码 / 私钥口令 / 私钥文件路径，
+//  覆盖范围 = 各 SSH / 数据库记录的 host / 用户名 / 密码 / 私钥口令 / 私钥文件路径，
 //  加上数据目录路径（含本机用户名）与 URL 内嵌凭据（https://user:pass@host）。
+//  按记录的脱敏开关（mcpRedactionEnabled）收缩：用户显式关闭脱敏的可见记录，
+//  其 host / 用户名不再进秘密集合（可出现在输出中，列表工具也会返回连接信息）；
+//  密码 / 口令 / 私钥路径与数据目录路径与开关无关，恒为秘密。
 //
 //  每次调用现查现拼（本地 SQLite 读取成本可忽略），不缓存——记录改动后立即生效。
 //  说明：这是「上下文卫生」层而非安全边界：模型输出的命令本身可能打印主机名等信息，
@@ -40,12 +43,18 @@ enum Redactor {
     }
 
     /// 当前应被视为秘密的字符串集合。
+    /// 标识类信息（host / 用户名）仅在记录「不可见 或 可见且开启脱敏」时计入；
+    /// 用户对可见记录显式关闭脱敏后，这些值允许出现在输出中（列表工具也会返回）。
+    /// 凭据类（密码 / 口令 / 私钥路径）与数据目录路径不受脱敏开关影响，恒计入。
     static func knownSecrets() -> [String] {
         var secrets: [String] = []
 
         for profile in SSHProfileStore.allRequests() {
-            if profile.host.count >= 3 { secrets.append(profile.host) }
-            if profile.username.count >= 3 { secrets.append(profile.username) }
+            let redactIdentity = !profile.mcpEnabled || profile.mcpRedactionEnabled
+            if redactIdentity {
+                if profile.host.count >= 3 { secrets.append(profile.host) }
+                if profile.username.count >= 3 { secrets.append(profile.username) }
+            }
             if let password = profile.password, !password.isEmpty { secrets.append(password) }
             if let passphrase = profile.keyPassphrase, !passphrase.isEmpty { secrets.append(passphrase) }
             if let fileName = profile.privateKeyFileName,
@@ -62,8 +71,10 @@ enum Redactor {
         }
 
         for connection in DBConnectionStore.all() {
-            if connection.host.count >= 3 { secrets.append(connection.host) }
-            if let username = connection.normalizedUsername, username.count >= 3 { secrets.append(username) }
+            if !connection.mcpEnabled || connection.mcpRedactionEnabled {
+                if connection.host.count >= 3 { secrets.append(connection.host) }
+                if let username = connection.normalizedUsername, username.count >= 3 { secrets.append(username) }
+            }
             if let password = connection.normalizedPassword { secrets.append(password) }
         }
 

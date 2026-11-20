@@ -92,7 +92,7 @@ private struct TreeRowView: View {
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 5)
-            .fill(isSelectedFolder ? Color.accentColor.opacity(0.14) : .clear))
+            .fill(isSelectedFolder ? Theme.Palette.accent.opacity(0.14) : .clear))
         .contentShape(Rectangle())
         .onTapGesture(perform: handleRowTap)
     }
@@ -117,7 +117,7 @@ private struct TreeRowView: View {
         if isFolder {
             Text(node.name)
                 .font(.system(size: 13))
-                .foregroundStyle(isSelectedFolder ? Color.accentColor : .primary)
+                .foregroundStyle(isSelectedFolder ? Theme.Palette.accent : .primary)
                 .lineLimit(1)
         } else {
             // 方法标签与名称拉近：用 minWidth 轻度对齐而非固定 44pt 宽，避免 GET 等短方法后的大空隙。
@@ -189,16 +189,16 @@ struct FolderPickerTree: View {
             Color.clear.frame(width: kTreeGutter, height: 16)
             Image(systemName: "house")
                 .font(.system(size: 11))
-                .foregroundStyle(selection == nil ? Color.accentColor : Color.secondary)
+                .foregroundStyle(selection == nil ? Theme.Palette.accent : Color.secondary)
                 .frame(width: kTreeIconWidth)
-            Text("根目录").foregroundStyle(selection == nil ? Color.accentColor : .primary)
+            Text("根目录").foregroundStyle(selection == nil ? Theme.Palette.accent : .primary)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 3)
         .padding(.trailing, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 5)
-            .fill(selection == nil ? Color.accentColor.opacity(0.14) : .clear))
+            .fill(selection == nil ? Theme.Palette.accent.opacity(0.14) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { selection = nil }
     }

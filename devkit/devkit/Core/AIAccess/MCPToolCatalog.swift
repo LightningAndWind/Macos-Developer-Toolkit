@@ -3,10 +3,13 @@
 //  devkit
 //
 //  AI 接入对外暴露的工具目录与分发：SSH 4 个（列表 / 开会话 / 执行 / 关会话）+
-//  Git 3 个（仓库列表 / 状态 / 执行）。安全约定：
-//  - 模型只拿得到「服务器别名 / ID」「仓库别名 / ID」，凭据（IP、用户名、密码、密钥路径）
-//    在本层内部经 SSHProfileStore / GitSSHBridge 取用，绝不出现在参数、结果与错误文本里；
-//  - 一切出站文本（含错误消息）都过 Redactor；
+//  Git 3 个（仓库列表 / 状态 / 执行）+ 数据库 3 个（连接列表 / SQL / Redis 命令）。安全约定：
+//  - 记录级访问控制：mcpEnabled == false 的记录不出现在列表里，按 id / 名称直接调用也当作不存在；
+//  - 记录级脱敏：mcpRedactionEnabled == true（默认）时模型只拿得到「别名 / ID」，
+//    凭据（IP、用户名、密码、密钥路径）在本层内部经 SSHProfileStore / GitSSHBridge 取用，
+//    绝不出现在参数、结果与错误文本里；用户显式关闭脱敏的记录，列表会额外返回 host / 端口 / 用户名，
+//    但密码 / 私钥口令 / 私钥路径与数据目录路径任何情况下都不输出；
+//  - 一切出站文本（含错误消息）都过 Redactor（其秘密集合同样按记录的脱敏开关收缩）；
 //  - 每次调用记入 AIAccessServer 审计日志。
 //
 
@@ -36,7 +39,7 @@ final class MCPToolCatalog {
     let definitions: [Definition] = [
         Definition(
             name: "ssh_list_servers",
-            description: L("列出 devkit 中已保存的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。出于安全考虑不返回 IP、用户名、端口等任何连接信息；后续工具用 id 或名称引用服务器。"),
+            description: L("列出 devkit 中已保存且允许 MCP 访问的远程服务器（id、名称别名、认证方式、默认工作目录），以及当前打开的持久会话列表。默认脱敏：不返回 IP、用户名、端口等连接信息；用户对个别服务器关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用服务器。"),
             inputSchema: MCPToolCatalog.schema(properties: [:])),
         Definition(
             name: "ssh_open_session",
@@ -71,7 +74,7 @@ final class MCPToolCatalog {
             ], required: ["session"])),
         Definition(
             name: "git_list_repos",
-            description: L("列出 devkit 中登记的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。"),
+            description: L("列出 devkit 中登记且允许 MCP 访问的本地 Git 仓库（id、别名、本地路径、是否绑定了 SSH 密钥）。默认对路径中的敏感前缀（如数据目录）脱敏；用户对个别仓库关闭脱敏时原样返回路径。"),
             inputSchema: MCPToolCatalog.schema(properties: [:])),
         Definition(
             name: "git_status",
@@ -94,7 +97,7 @@ final class MCPToolCatalog {
             ], required: ["repo", "args"])),
         Definition(
             name: "db_list_connections",
-            description: L("列出 devkit 中已保存的数据库连接（MySQL / Redis：id、名称、类型、默认库）。出于安全考虑不返回主机、用户名等连接信息；后续工具用 id 或名称引用连接。"),
+            description: L("列出 devkit 中已保存且允许 MCP 访问的数据库连接（MySQL / Redis：id、名称、类型、默认库）。默认脱敏：不返回主机、用户名等连接信息；用户对个别连接关闭脱敏时，该条目会额外包含 host / port / username。后续工具用 id 或名称引用连接。"),
             inputSchema: MCPToolCatalog.schema(properties: [:])),
         Definition(
             name: "db_query",
@@ -175,25 +178,38 @@ final class MCPToolCatalog {
     // MARK: - SSH 工具
 
     private func listServers(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
-        let servers: [MCPJSON] = SSHProfileStore.allRequests()
-            .filter { $0.isRemote }
-            .map { p in
+        // 访问控制：mcpEnabled == false 的记录对 MCP 完全不可见（列表无此条，直连也当作不存在）。
+        let visible = SSHProfileStore.allRequests().filter { $0.isRemote && $0.mcpEnabled }
+        let servers: [MCPJSON] = visible.map { p in
+            var fields: [String: MCPJSON] = [
+                "id": .string(p.id.uuidString),
+                "name": .string(p.name),
+                "authKind": .string(p.authKind.rawValue),
+                "defaultWorkingDirectory": p.normalizedWorkingDirectory
+                    .map { .string(p.mcpRedactionEnabled ? Redactor.redact($0) : $0) } ?? .null,
+            ]
+            // 关闭脱敏的记录：额外返回连接信息（密码与私钥永不返回）。
+            if !p.mcpRedactionEnabled {
+                fields["host"] = .string(p.host)
+                fields["port"] = .int(Int64(p.port))
+                if !p.username.isEmpty { fields["username"] = .string(p.username) }
+            }
+            return .object(fields)
+        }
+        // 活跃会话里属于隐藏服务器的也一并隐去（会话摘要只带服务器名，按名过滤）。
+        let hiddenNames = Set(SSHProfileStore.allRequests()
+            .filter { $0.isRemote && !$0.mcpEnabled }
+            .map(\.name))
+        let sessions: [MCPJSON] = SSHSessionRegistry.shared.summaries
+            .filter { !hiddenNames.contains($0.server) }
+            .map { s in
                 .object([
-                    "id": .string(p.id.uuidString),
-                    "name": .string(p.name),
-                    "authKind": .string(p.authKind.rawValue),
-                    "defaultWorkingDirectory": p.normalizedWorkingDirectory
-                        .map { .string(Redactor.redact($0)) } ?? .null,
+                    "sessionId": .string(s.sessionId.uuidString),
+                    "server": .string(s.server),
+                    "authKind": .string(s.authKind),
+                    "idleSeconds": .int(Int64(s.idleSeconds)),
                 ])
             }
-        let sessions: [MCPJSON] = SSHSessionRegistry.shared.summaries.map { s in
-            .object([
-                "sessionId": .string(s.sessionId.uuidString),
-                "server": .string(s.server),
-                "authKind": .string(s.authKind),
-                "idleSeconds": .int(Int64(s.idleSeconds)),
-            ])
-        }
         let result = MCPJSON.object(["servers": .array(servers), "activeSessions": .array(sessions)])
         return DispatchOutcome(text: result.encoded(), isError: false, summary: String(format: L("共 %lld 台服务器"), servers.count))
     }
@@ -271,16 +287,19 @@ final class MCPToolCatalog {
     // MARK: - Git 工具
 
     private func listRepos(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
-        let repos: [MCPJSON] = GitRepoStore.allRepos().map { r in
-            .object([
-                "id": .string(r.id.uuidString),
-                "alias": .string(r.alias),
-                "path": .string(r.path),
-                "hasBoundKey": .bool(r.keyID != nil),
-            ])
-        }
+        // 路径按记录决定是否脱敏（原来对整包 JSON 脱敏会误伤关闭脱敏记录的路径）。
+        let repos: [MCPJSON] = GitRepoStore.allRepos()
+            .filter { $0.mcpEnabled }
+            .map { r in
+                .object([
+                    "id": .string(r.id.uuidString),
+                    "alias": .string(r.alias),
+                    "path": .string(r.mcpRedactionEnabled ? Redactor.redact(r.path) : r.path),
+                    "hasBoundKey": .bool(r.keyID != nil),
+                ])
+            }
         let result = MCPJSON.object(["repos": .array(repos)])
-        return DispatchOutcome(text: Redactor.redact(result.encoded()), isError: false,
+        return DispatchOutcome(text: result.encoded(), isError: false,
                                summary: String(format: L("共 %lld 个仓库"), repos.count))
     }
 
@@ -333,14 +352,23 @@ final class MCPToolCatalog {
     // MARK: - 数据库工具
 
     private func listDBConnections(_ args: [String: MCPJSON]) async throws -> DispatchOutcome {
-        let connections: [MCPJSON] = DBConnectionStore.all().map { c in
-            .object([
-                "id": .string(c.id.uuidString),
-                "name": .string(c.name),
-                "kind": .string(c.kind.rawValue),
-                "defaultDatabase": c.normalizedDatabase.map { .string($0) } ?? .null,
-            ])
-        }
+        let connections: [MCPJSON] = DBConnectionStore.all()
+            .filter { $0.mcpEnabled }
+            .map { c in
+                var fields: [String: MCPJSON] = [
+                    "id": .string(c.id.uuidString),
+                    "name": .string(c.name),
+                    "kind": .string(c.kind.rawValue),
+                    "defaultDatabase": c.normalizedDatabase.map { .string($0) } ?? .null,
+                ]
+                // 关闭脱敏的记录：额外返回连接信息（密码永不返回）。
+                if !c.mcpRedactionEnabled {
+                    fields["host"] = .string(c.host)
+                    fields["port"] = .int(Int64(c.port))
+                    if let username = c.normalizedUsername { fields["username"] = .string(username) }
+                }
+                return .object(fields)
+            }
         let result = MCPJSON.object(["connections": .array(connections)])
         return DispatchOutcome(text: result.encoded(), isError: false,
                                summary: String(format: L("共 %lld 个数据库连接"), connections.count))
@@ -387,10 +415,11 @@ final class MCPToolCatalog {
     }
 
     // MARK: - 解析与辅助
-    /// 按 UUID 精确匹配，再按名称（精确 → 忽略大小写）匹配；仅接受远程记录。
+    /// 按 UUID 精确匹配，再按名称（精确 → 忽略大小写）匹配；仅接受远程且允许 MCP 访问的记录
+    /// （mcpEnabled == false 的记录对 MCP 完全不存在，报与未知引用相同的错误，不泄露其存在）。
     private func resolveProfile(_ ref: String?) throws -> SSHProfile {
         guard let ref, !ref.isEmpty else { throw MCPToolError(message: L("缺少 server 参数")) }
-        let all = SSHProfileStore.allRequests().filter { $0.isRemote }
+        let all = SSHProfileStore.allRequests().filter { $0.isRemote && $0.mcpEnabled }
         if let id = UUID(uuidString: ref), let p = all.first(where: { $0.id == id }) {
             return p
         }
@@ -401,7 +430,7 @@ final class MCPToolCatalog {
 
     private func resolveRepo(_ ref: String?) throws -> GitRepo {
         guard let ref, !ref.isEmpty else { throw MCPToolError(message: L("缺少 repo 参数")) }
-        let all = GitRepoStore.allRepos()
+        let all = GitRepoStore.allRepos().filter { $0.mcpEnabled }
         if let id = UUID(uuidString: ref), let r = all.first(where: { $0.id == id }) {
             return r
         }
@@ -410,10 +439,10 @@ final class MCPToolCatalog {
         throw MCPToolError(message: String(format: L("找不到仓库「%@」；请先 git_list_repos 查看已登记的仓库"), ref))
     }
 
-    /// 按 UUID 精确匹配，再按名称（精确 → 忽略大小写）匹配。
+    /// 按 UUID 精确匹配，再按名称（精确 → 忽略大小写）匹配；仅接受允许 MCP 访问的记录。
     private func resolveDBConnection(_ ref: String?) throws -> DBConnection {
         guard let ref, !ref.isEmpty else { throw MCPToolError(message: L("缺少 connection 参数")) }
-        let all = DBConnectionStore.all()
+        let all = DBConnectionStore.all().filter { $0.mcpEnabled }
         if let id = UUID(uuidString: ref), let c = all.first(where: { $0.id == id }) {
             return c
         }

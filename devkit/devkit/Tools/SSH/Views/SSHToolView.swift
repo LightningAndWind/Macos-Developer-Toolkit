@@ -192,16 +192,25 @@ private struct SSHTerminalPlaceholder: View {
     }
 }
 
-private extension View {
-    /// 连接横幅的悬浮卡片外观：圆角毛玻璃底 + 细描边 + 轻阴影，浮于终端之上。
-    func bannerCard() -> some View {
-        self
-            .background(.ultraThinMaterial,
+/// 连接横幅的悬浮卡片外观：圆角毛玻璃底 + 细描边 + 轻阴影，浮于终端之上。
+/// 简约模式下换成实心窗口灰（View 扩展读不到环境值，故包成修饰器）。
+private struct BannerCardModifier: ViewModifier {
+    @Environment(\.minimalMode) private var minimalMode
+
+    func body(content: Content) -> some View {
+        content
+            .background(minimalMode ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor)) : AnyShapeStyle(.ultraThinMaterial),
                         in: RoundedRectangle(cornerRadius: Theme.Metrics.bannerCornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Metrics.bannerCornerRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08))
             )
             .shadow(color: Theme.Palette.floatingShadow, radius: 6, y: 2)
+    }
+}
+
+private extension View {
+    func bannerCard() -> some View {
+        modifier(BannerCardModifier())
     }
 }
